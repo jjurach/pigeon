@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pigeon"
+version = "0.1.0"
+description = "Google Drive polling service for voice recordings"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "hentown project", email = ""}
+]
+
+dependencies = [
+    "google-api-python-client>=2.90",
+    "google-auth-oauthlib>=1.2",
+    "google-auth>=2.26",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.21",
+    "pytest-mock>=3.12",
+    "black>=23.12",
+]
+
+[project.scripts]
+pigeon = "pigeon.main:main"
+
+[tool.setuptools]
+packages = ["pigeon"]
+package-dir = {"" = "src"}
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
