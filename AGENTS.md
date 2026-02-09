@@ -102,6 +102,27 @@ If you can't answer these, **re-read the mandatory files now**. This isn't punis
 **Remember:** Reading is REQUIRED, not suggested. These files are in your context for a reason.
 <!-- END-SECTION -->
 
+<!-- SECTION: PROJECT-SPECIFIC -->
+## Project-Specific Rules: Polecat Tactical Execution
+
+### 1. Your Role: Tactical Executor
+- **Source of Truth:** The Bead description (provided by Mayor) and `docs/specs/` (in Town Root).
+- **Mandate:** Execute the assigned Bead.
+- **Workflow:**
+    1.  Read the Bead (`bd show <id>`).
+    2.  Create a tactical plan in `dev_notes/project_plans/` (following the Logs-First workflow).
+    3.  Execute and verify.
+
+### 2. File Organization
+- **Architectural Specs:** `docs/specs/` (Mayor managed, authoritative).
+- **Execution Plans:** `dev_notes/` (Polecat managed, ephemeral/tactical).
+
+### 3. Documentation Access
+- **System Prompts:** `docs/system-prompts/` (Local Copy)
+- **Project Specs:** `${GT_TOWN_ROOT}/docs/specs/`
+<!-- END-SECTION -->
+
+
 <!-- SECTION: CORE-WORKFLOW -->
 # Agent Kernel: Core Workflow & Unbreakable Rules
 
