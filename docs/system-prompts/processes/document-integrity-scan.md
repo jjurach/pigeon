@@ -44,7 +44,7 @@ The document integrity scan is a multi-layer verification process that checks:
 Resolution:
 - Source: `README.md` (in project root)
 - Relative path: `docs/system-prompts/tools/claude-code.md`
-- Resolved: `/home/phaedrus/AiSpace/second_voice/docs/system-prompts/tools/claude-code.md`
+- Resolved: `/path/to/project/docs/system-prompts/tools/claude-code.md`
 - Verification: File exists ✅
 
 **Failure Example:**
@@ -155,7 +155,7 @@ Check docs/test-guide.md for more information.
 
 **Process:**
 1. Check `docs/tool-specific-guides/` directory:
-   - All files should be project-specific (reference second_voice architecture, configuration, etc.)
+   - All files should be project-specific (reference project architecture, configuration, etc.)
    - Should NOT be generic AGENTS.md + tool workflow guides
 2. Check `docs/system-prompts/tools/` directory:
    - All files should be generic (reusable across projects)
@@ -163,8 +163,8 @@ Check docs/test-guide.md for more information.
    - Should NOT reference project-specific implementation details
 
 **Verification:**
-- ✅ `docs/tool-specific-guides/cline.md` - Project-specific (references `second_voice` architecture, `src/second_voice/core/processor.py`)
-- ✅ `docs/system-prompts/tools/claude-code.md` - Generic (explains AGENTS.md + Claude Code, no second_voice references)
+- ✅ `docs/tool-specific-guides/cline.md` - Project-specific (references project architecture, source code paths)
+- ✅ `docs/system-prompts/tools/claude-code.md` - Generic (explains AGENTS.md + Claude Code, no project-specific references)
 - ✅ `docs/system-prompts/tools/aider.md` - Generic (explains AGENTS.md + Aider)
 - ✅ `docs/system-prompts/tools/codex.md` - Generic (explains AGENTS.md + Codex)
 - ✅ `docs/system-prompts/tools/gemini.md` - Generic (explains AGENTS.md + Gemini)
@@ -341,7 +341,7 @@ Rationale:
 Generic tool guides (reusable across projects):
   Location: docs/system-prompts/tools/{tool}.md
   Content: AGENTS.md workflow + tool integration patterns
-  References: No second_voice-specific code or architecture
+  References: No project-specific code or architecture
 
 Project-specific guides:
   Location: docs/tool-specific-guides/{tool}.md
@@ -413,7 +413,7 @@ Found 3 broken links:
 
   docs/file-naming-conventions.md
     → ./AGENTS.md
-    Target: /home/phaedrus/AiSpace/second_voice/docs/AGENTS.md
+    Target: /path/to/project/docs/AGENTS.md
     ❌ File does not exist
 ```
 
@@ -443,7 +443,7 @@ Files referencing tool guides:
 
 ### Manual Execution
 ```bash
-cd /path/to/second_voice
+cd /path/to/your-project
 python3 docs/system-prompts/docscan.py
 ```
 

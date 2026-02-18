@@ -24,7 +24,7 @@ This guide covers how to use **Aider** (collaborative AI coding tool) with this 
 pip install aider-chat
 
 # Start Aider in your project
-cd /path/to/second_voice
+cd /path/to/your-project
 aider
 
 # Example: Ask Aider to fix tests

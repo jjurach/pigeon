@@ -318,6 +318,38 @@ Check:
 - [ ] Change documentation is committed with code changes
 - [ ] Co-author attribution present
 
+#### 4.5 Close Bead (If Beads Enabled)
+
+**If this work was dispatched via beads:**
+
+1. **Identify bead ID**
+   - Check if you received bead ID in prompt: "implement bd-a1b2"
+   - Or check change documentation for bead reference: `Bead: bd-a1b2`
+
+2. **Close the bead**
+   ```bash
+   bd update <bead-id> --close
+   ```
+
+3. **Verify closure**
+   ```bash
+   bd show <bead-id>
+   # Should show status: closed
+   ```
+
+**If not using beads:**
+- Skip this step
+
+**Example:**
+```bash
+# If bead ID is bd-a1b2.1
+bd update bd-a1b2.1 --close
+
+# Verify
+bd show bd-a1b2.1
+# Output should include: status: closed
+```
+
 ---
 
 ### Phase 5: Final Status Report

@@ -148,6 +148,11 @@ This document defines the standard templates for Spec Files, Project Plans, and 
 - **Medium Risk:** [Potential issues and mitigation]
 - **High Risk:** [Critical dependencies or complex changes]
 
+## Lessons Learned (Self-Healing)
+- [This section is for documenting insights discovered during implementation]
+- [Subsequent tasks should check this section to avoid repeating mistakes]
+- [Agents: Update this section as you learn things that would help future tasks]
+
 ## Estimated Scope
 - **New code:** ~X lines
 - **Configuration changes:** ~X lines
@@ -322,6 +327,12 @@ This change satisfies:
 - ✅ Code quality (follows project patterns)
 - ✅ Documentation (updated in docs/)
 - ✅ Dependencies (in requirements.txt and pyproject.toml)
+
+## Workflow & Tooling Feedback
+[Optional: specific friction points with beads, system prompts, or the workflow itself]
+- **Issue:** [e.g., "beads CLI timed out waiting for lock"]
+- **Workaround:** [e.g., "Manually removed .beads/lock file"]
+- **Suggestion:** [e.g., "Increase default timeout in config"]
 
 ## Known Issues
 

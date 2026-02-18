@@ -32,7 +32,7 @@ pip install gemini-cli
 export GOOGLE_API_KEY="your-key-here"
 
 # Run in project root
-cd /path/to/second_voice
+cd /path/to/your-project
 gemini
 ```
 
@@ -112,7 +112,7 @@ New context-driven development approach:
 Create a `GEMINI.md` file in `.gemini/GEMINI.md` with the following content:
 
 ```markdown
-# Second Voice - Gemini Instructions
+# Project Name - Gemini Instructions
 
 ## Core Workflow
 This project follows the **AGENTS.md** workflow.
@@ -245,7 +245,7 @@ User: "In src/api.py, after the 'def get_user()' function (around line 45),
 - ✅ Conductor extension preview (structured development)
 - ✅ Native AGENTS.md support via .gemini/GEMINI.md
 - ✅ Web search grounding (for best practices, patterns)
-- ✅ Compatible with `second_voice` workflow
+- ✅ Compatible with AGENTS.md workflow
 
 ## Key Differences from Claude Code
 

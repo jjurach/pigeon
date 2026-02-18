@@ -24,7 +24,7 @@ This guide covers how to use **Claude Code** (the official Anthropic Claude CLI 
 pip install anthropic-claude-code
 
 # Initialize in your project
-cd /path/to/second_voice
+cd /path/to/your-project
 claude-code
 
 # Example: Ask Claude Code to fix tests

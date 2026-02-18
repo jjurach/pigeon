@@ -200,15 +200,15 @@ python3 bootstrap.py --disable-logs-first --commit
 
 ## Workflow Recommendations
 
-### For This Project (second_voice)
+### Determining the Right Workflow for Your Project
 
-**Auto-detect recommends:** logs-first
+**The bootstrap.py analyzer will recommend** based on your project characteristics:
 
-**Why:**
-- Small team (1 developer)
-- Active project (frequent commits)
-- Already has dev_notes/ structure
-- Values documentation and decision history
+**Example criteria:**
+- Team size (solo developer vs larger team)
+- Project activity (frequent commits vs stable)
+- Existing structure (has dev_notes/ or similar)
+- Documentation preferences (detailed audit trail vs minimal overhead)
 
 **Setup:**
 ```bash

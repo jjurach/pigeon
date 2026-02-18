@@ -320,7 +320,7 @@ codex-dev 'read dev_notes/changes/2026-01-29_14-22-00_add-oauth-auth.md and cont
 
 ## Project-Specific Settings
 
-### For This Project (`second_voice`)
+### Configuring for Your Project
 
 You can configure project-specific settings in `.codex/config.toml` or `.codex/config.json`:
 

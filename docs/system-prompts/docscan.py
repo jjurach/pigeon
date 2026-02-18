@@ -649,16 +649,22 @@ class DocumentScanner:
 
                 # Generic guides shouldn't heavily reference project implementation
                 # (some mentions in examples are OK, but shouldn't be main focus)
-                src_second_voice_refs = len(re.findall(r"src/second_voice", content))
-                processor_refs = len(re.findall(r"processor\.py", content))
+                # Check for patterns that suggest project-specific content:
+                # - References to src/ directories with specific module names
+                # - References to specific Python files
+                # - Module-specific configuration files
+                project_src_refs = len(re.findall(r"src/\w+/", content))
+                specific_file_refs = len(re.findall(r"\w+\.py", content))
 
-                if src_second_voice_refs > 2 or processor_refs > 2:
+                # If there are many specific references, it might be project-specific
+                # This is a heuristic - adjust thresholds as needed
+                if project_src_refs > 5 or specific_file_refs > 10:
                     self.violations.append(
                         {
                             "file": str(guide_file.relative_to(self.project_root)),
                             "type": "tool-organization",
                             "severity": "warning",
-                            "message": "Generic tool guide contains many project-specific references",
+                            "message": "Generic tool guide may contain project-specific references",
                         }
                     )
 
@@ -669,8 +675,15 @@ class DocumentScanner:
 
                 # Check if it's actually generic (shouldn't be here)
                 # Generic guides explain tool + AGENTS.md but don't explain project integration
-                has_project_specifics = any(
-                    term in content for term in ["src/second_voice", "processor", "settings.json"]
+                # Project-specific guides should reference:
+                # - Specific source code paths (src/module_name/)
+                # - Specific Python module files
+                # - Project-specific configuration files
+                has_project_specifics = (
+                    bool(re.search(r"src/\w+/\w+", content))  # Specific module paths
+                    or bool(re.search(r"`\w+/\w+\.py`", content))  # Specific Python files
+                    or "project architecture" in content.lower()
+                    or "project-specific" in content.lower()
                 )
 
                 if not has_project_specifics and guide_file.name != "README.md":

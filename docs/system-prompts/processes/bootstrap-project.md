@@ -1441,6 +1441,291 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
 
 ---
 
+## Phase 6.5: Optional - Initialize Beads Workflow (If Requested)
+
+**Applies to:** Projects explicitly requesting beads integration
+**Goal:** Set up beads task tracking for plan-and-dispatch workflow
+
+### ⚠️ CRITICAL: BEADS INITIALIZATION RULES
+
+**ONLY execute this phase when explicitly mentioned in the bootstrap request.** Do NOT initialize beads unless the user's prompt specifically says "beads" or "beads workflow" or similar.
+
+**Beads is STICKY:** Once a project has beads initialized (i.e., `.beads/` directory exists), that attribute persists:
+- All future project plans should assume beads is available
+- Use `bd` commands in workflows and shell scripts
+- Track tasks with beads (don't fall back to logs-only)
+- Beads-aware agents will check for `.beads/` directory and use it automatically
+
+**For next agents working on beads-enabled projects:**
+- Check if `.beads/` directory exists before starting work
+- If it exists, assume beads workflow is active
+- Use `bd ready`, `bd list`, `bd create`, `bd close` commands
+- Document beads interactions in project plans
+
+### Step 6.5.1: Verify Prerequisites
+
+**Check beads CLI is installed:**
+```bash
+which bd
+bd --version
+```
+
+**If beads not installed:**
+```bash
+npm install -g @beads/bd
+```
+
+### Step 6.5.2: Initialize Beads Database
+
+**Run the planning-init automation script:**
+```bash
+python3 docs/system-prompts/planning-init.py
+```
+
+**Or manually initialize:**
+```bash
+bd init
+```
+
+**Verify initialization:**
+```bash
+ls -la .beads/
+```
+
+**Expected files:**
+- `.beads/config.yaml` - Beads configuration
+- `.beads/beads.db` - SQLite database
+- `.beads/issues.jsonl` - JSONL backup of issues
+- `.beads/README.md` - Label documentation
+- `.beads/.gitignore` - Git exclusions
+
+### Step 6.5.3: Configure Project-Specific Settings
+
+**Create/update `.beads/config.yaml`:**
+
+```yaml
+# Example configuration for [PROJECT NAME]
+issue-prefix: "sv"  # Change to your project prefix
+
+# Enable auto-daemon for RPC communication (optional)
+auto-start-daemon: true
+
+# Enable events export for audit trail
+events-export: false
+```
+
+**Key settings:**
+- `issue-prefix`: Short prefix for issue IDs (e.g., "sv" creates sv-1, sv-2, etc.)
+- `auto-start-daemon`: Whether to auto-start daemon (recommended: true)
+
+### Step 6.5.4: Create Bead Labels Documentation
+
+**Create `.beads/README.md`** with label definitions. Reference: [.beads/README.md example](../../.beads/README.md)
+
+Key labels to document:
+- **approval** - Blocks implementation until human reviews plan
+- **implementation** - Standard work beads
+- **planning** - Convert specs into plans and beads
+- **research** - Investigation/discovery (no code changes)
+- **verification** - Quality gates (tests pass, etc.)
+- **documentation** - Doc updates
+- **worker-session** - Audit trail of agent work
+- **failure** - Tracks errors requiring human intervention
+
+### Step 6.5.5: Initialize First Beads (Optional)
+
+**Create a test-only bead in `not-ready` status as a starting point:**
+
+```bash
+# Create test bead that will be blocked by approval
+bd create "Test bead for planning initialization" \
+  --type=task \
+  --label=testing \
+  --status=not-ready \
+  --priority=3
+
+# Verify creation
+bd list
+```
+
+**This bead serves as:**
+- A concrete example of the bead system
+- A starting point for future bead-based work
+- A placeholder for orchestration/waiting issues
+
+### Step 6.5.6: Update .gitignore and .gitattributes
+
+**Add beads-specific entries to `.gitignore`:**
+
+```
+# Beads local configuration and caches
+.bv/
+.beads/daemon.lock
+.beads/daemon.pid
+.beads/daemon.log
+.beads/.jsonl.lock
+.beads/beads.db-shm
+.beads/beads.db-wal
+.beads/.local_version
+.beads/last-touched
+```
+
+**Create/update `.gitattributes` for beads JSONL merge strategy:**
+
+```
+.beads/issues.jsonl merge=union
+.beads/interactions.jsonl merge=union
+.beads/events.jsonl merge=union
+```
+
+**Configure git merge strategy:**
+
+```bash
+# Tell git how to merge JSONL files (append lines without conflicts)
+git config merge.union.driver "cat %O > %A; cat %B >> %A"
+```
+
+### Step 6.5.7: Document Beads Integration in AGENTS.md
+
+**Add Beads Workflow Integration section to AGENTS.md:**
+
+```markdown
+## Beads Workflow Integration
+
+This project uses [beads_viewer](https://github.com/Dicklesworthstone/beads_viewer) for issue tracking with the plan-and-dispatch workflow.
+
+### Essential Commands
+
+\`\`\`bash
+# Check ready work
+bd ready
+
+# List all issues
+bd list --status=open
+
+# Show issue details
+bd show <id>
+
+# Create new issue
+bd create --title="..." --type=task --priority=2
+
+# Update status
+bd update <id> --status=in_progress
+
+# Close issue
+bd close <id> --reason="Completed"
+
+# Sync changes to git
+bd sync
+\`\`\`
+
+### Workflow Pattern
+
+1. **Start**: Run `bd ready` to find actionable work
+2. **Claim**: Use `bd update <id> --status=in_progress`
+3. **Work**: Implement the task
+4. **Complete**: Use `bd close <id>`
+5. **Sync**: Run `bd sync` at session end
+
+### Session Completion Protocol
+
+Before ending a session:
+
+\`\`\`bash
+git status              # Check changes
+git add <files>         # Stage changes
+bd sync                 # Commit beads
+git commit -m "..."     # Commit code
+bd sync                 # Sync any new beads
+git push                # Push to remote
+\`\`\`
+
+See [.beads/README.md](.beads/README.md) for label definitions and workflows.
+```
+
+**Add "Landing the Plane" session completion workflow:**
+
+```markdown
+## Landing the Plane (Session Completion)
+
+When ending a work session, complete these steps:
+
+1. **File issues for remaining work** - Create beads for follow-up tasks
+2. **Run quality gates** - Tests, linters, builds
+3. **Update issue status** - Close finished work
+4. **Sync beads**: `bd sync`
+5. **Push to remote**:
+   \`\`\`bash
+   git pull --rebase
+   bd sync
+   git push
+   git status  # Should show "up to date with origin"
+   \`\`\`
+6. **Verify** - All changes committed and pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - work will be stranded locally
+- NEVER say "ready to push" - YOU must push
+```
+
+### Step 6.5.8: Add Beads Configuration to docs/
+
+**Create `docs/beads-workflow.md`** (optional, for detailed documentation):
+
+```markdown
+# Beads Workflow Guide
+
+[Project name] uses beads for task tracking with the plan-and-dispatch workflow.
+
+## Quick Start
+
+See [AGENTS.md](../AGENTS.md) for essential commands and workflow pattern.
+
+## Label Types
+
+See [.beads/README.md](../.beads/README.md) for complete label definitions.
+
+## Planning-Init Process
+
+To set up beads for a new project:
+
+\`\`\`bash
+python3 docs/system-prompts/planning-init.py
+\`\`\`
+
+See [docs/system-prompts/processes/planning-init.md](../system-prompts/processes/planning-init.md) for details.
+
+## See Also
+
+- [AGENTS.md](../AGENTS.md) - Core workflow
+- [.beads/README.md](../.beads/README.md) - Label definitions
+- [Planning Summary](planning-summary.md) - View all beads status
+```
+
+### Step 6.5.9: Commit Beads Integration
+
+```bash
+git add .beads/ .gitignore .gitattributes AGENTS.md docs/beads-workflow.md
+
+git commit -m "chore: Initialize beads workflow integration
+
+- Initialize beads database with planning-init
+- Configure issue prefix and labels
+- Add .beads/ documentation for label patterns
+- Update AGENTS.md with Beads Workflow Integration section
+- Add Landing the Plane session completion workflow
+- Configure .gitignore and .gitattributes for beads JSONL merge
+- Document beads best practices
+
+Beads is now ready for plan-and-dispatch workflow.
+
+Co-Authored-By: Claude [Model] <noreply@anthropic.com>"
+```
+
+---
+
 ## Phase 7: Final Validation and Summary
 
 **Applies to:** Both scenarios
@@ -1587,6 +1872,8 @@ Sections to sync (3):
 
 ## Success Criteria - All Met ✓
 
+### Core Documentation (All Scenarios)
+
 - ✓ All critical TODOs resolved
 - ✓ All broken links fixed
 - ✓ Core documentation files created
@@ -1597,12 +1884,24 @@ Sections to sync (3):
 - ✓ Bootstrap synchronized
 - ✓ All documentation discoverable
 
+### Beads Integration (If Phase 6.5 Executed)
+
+- ✓ Beads database initialized (`.beads/` directory exists)
+- ✓ Configuration created (`.beads/config.yaml`)
+- ✓ Labels documented (`.beads/README.md`)
+- ✓ AGENTS.md updated with Beads Workflow Integration section
+- ✓ Landing the Plane session completion workflow documented
+- ✓ .gitignore updated for beads files
+- ✓ .gitattributes configured for JSONL merge strategy
+- ✓ First test bead created (optional, for reference)
+
 ## Next Steps
 
 1. Continue development using AGENTS.md workflow
 2. Follow definition-of-done.md for quality standards
 3. Use templates from docs/templates.md for planning
 4. Reference docs/README.md for documentation navigation
+5. If beads integrated: Use `bd ready` to find work and `bd close` to complete beads
 
 Integration complete. Project ready for development.
 ```
@@ -1614,7 +1913,7 @@ git add dev_notes/changes/[timestamp]_bootstrap-integration-complete.md [any oth
 
 git commit -m "docs: complete Agent Kernel bootstrap integration
 
-All 7 phases completed:
+All phases completed:
 ✓ Phase 0: Pre-bootstrap analysis
 ✓ Phase 1: Run bootstrap
 ✓ Phase 2: Comprehensive documentation scan
@@ -1622,6 +1921,7 @@ All 7 phases completed:
 ✓ Phase 4: Consolidate duplicated content
 ✓ Phase 5: Establish cross-references
 ✓ Phase 6: Run integrity processes
+✓ Phase 6.5: Initialize beads workflow (optional, if requested)
 ✓ Phase 7: Final validation
 
 Final Status:
@@ -1631,6 +1931,7 @@ Final Status:
 - Duplication reduced: [PERCENT]%
 - Document integrity: 0 errors
 - Bootstrap status: All sections synchronized
+- Beads workflow: [Initialized/Skipped]
 
 Project documentation fully integrated with Agent Kernel.
 

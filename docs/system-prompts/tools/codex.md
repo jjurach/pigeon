@@ -18,7 +18,7 @@ npm install -g @openai/codex
 export OPENAI_API_KEY="sk-..."
 
 # Run in project root
-cd /path/to/second_voice
+cd /path/to/your-project
 codex
 ```
 
@@ -174,4 +174,4 @@ git revert <commit-hash>  # Revert specific commit
 
 - ✅ Sandboxed execution (macOS/Linux)
 
-- ✅ Workflow compatible with `second_voice` AGENTS.md
+- ✅ Workflow compatible with AGENTS.md

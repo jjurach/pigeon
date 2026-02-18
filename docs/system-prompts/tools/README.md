@@ -70,7 +70,7 @@ For details on managing entry points, see [Tool Entry Points Process](../process
 
 ## Project-Specific Tool Guides
 
-For guides specific to individual projects (e.g., how Cline integrates with second_voice), see the project's `docs/tool-specific-guides/` directory.
+For guides specific to individual projects (e.g., how a tool integrates with your project's architecture), see the project's `docs/tool-specific-guides/` directory (if present).
 
 ## How Agents Use These Guides
 
