@@ -486,8 +486,11 @@ Recommendation:
 
 ### View Current Status
 
+The planning-summary script automatically includes beads from all git submodules that have
+a `.beads/` directory. This gives a unified view across Hentown and all active sub-projects.
+
 ```bash
-# Quick summary
+# Quick summary (includes all submodules by default)
 python3 docs/system-prompts/planning-summary.py
 
 # Show only ready beads
@@ -498,6 +501,12 @@ python3 docs/system-prompts/planning-summary.py --label failure
 
 # Verbose mode with full descriptions
 python3 docs/system-prompts/planning-summary.py --verbose
+
+# Root project only (skip submodules)
+python3 docs/system-prompts/planning-summary.py --no-submodules
+
+# Specific submodules only
+python3 docs/system-prompts/planning-summary.py --submodules cackle,pigeon
 ```
 
 ### Check for Problems
@@ -700,5 +709,7 @@ bd update bd-stale-id --close
 
 ---
 
-**Last Updated:** 2026-02-15
-**Recent Updates:** 2026-02-15 - Added Planning Pre-Flight Checklist, External Resources template, and Phase Review Checkpoint references
+**Last Updated:** 2026-02-18
+**Recent Updates:**
+- 2026-02-18 - Updated Monitoring section to document multi-project support (`--no-submodules`, `--submodules` flags)
+- 2026-02-15 - Added Planning Pre-Flight Checklist, External Resources template, and Phase Review Checkpoint references

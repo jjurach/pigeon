@@ -136,6 +136,79 @@ def load_beads(self) -> bool:
 
 ---
 
+## Multi-Source Aggregation Patterns
+
+When building tools that read from multiple independent data sources (e.g., submodules, projects, or files), use these patterns to avoid cascade failures and produce clear output.
+
+### Pattern: Per-Source Error Isolation
+
+Always wrap each source's processing in an exception catch. Store the error in the result object rather than propagating it. This prevents one bad source from blocking all others.
+
+```python
+results = []
+for item in items:
+    try:
+        result = process(item)
+        results.append({'name': item.name, 'data': result, 'error': None})
+    except Exception as e:
+        # Log to stderr with source identifier, continue processing
+        print(f"Warning: [{item.name}] {e}", file=sys.stderr)
+        results.append({'name': item.name, 'data': None, 'error': str(e)})
+# Process results - check result['error'] is None before using result['data']
+```
+
+**Key rules:**
+- Always prefix error messages with `[SourceName]` so failures are identifiable in multi-source output
+- Store error state in result object, don't silently swallow or re-raise
+- Continue processing remaining sources after any single failure
+
+### Pattern: Annotate All Messages with Source Context
+
+In multi-source tools, every log line must include a source prefix:
+```python
+# ❌ BAD: Ambiguous in multi-project output
+print(f"Warning: Skipping corrupt line 42 in .beads/issues.jsonl", file=sys.stderr)
+
+# ✅ GOOD: Source identified
+print(f"Warning: [myproject] Skipping corrupt line 42 in .beads/issues.jsonl", file=sys.stderr)
+```
+
+### Pattern: Separate Structured Output from Diagnostic Output
+
+Tools that produce machine-readable output (JSON, CSV) must **never** write to stdout except for the structured data. All warnings and diagnostics go to stderr.
+
+```python
+# ❌ BAD: Mixes warning into JSON stream
+print("Warning: some issue")   # stdout - will corrupt JSON consumers
+print(json.dumps(result))
+
+# ✅ GOOD: Diagnostics to stderr, data to stdout
+print("Warning: some issue", file=sys.stderr)
+print(json.dumps(result))      # stdout only for structured data
+```
+
+**Document this in the tool's help text**, since users piping output may use `2>&1` which silently corrupts the structured output. Example: "Note: use without `2>&1` when parsing JSON output - warnings go to stderr."
+
+### Pattern: Line-by-Line Parsing for JSONL / Streaming Formats
+
+Never parse a multi-record text format as a single unit. Always iterate line-by-line and apply error handling per line:
+
+```python
+with open(jsonl_path, 'r') as f:
+    records = []
+    for lineno, line in enumerate(f, 1):
+        if not line.strip():
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError as e:
+            print(f"Warning: [{source_name}] Skipping corrupt line {lineno}: {e}", file=sys.stderr)
+```
+
+This prevents a single malformed line from losing all subsequent data. Emit a per-line warning with file path and line number for debugging.
+
+---
+
 ## Common Tool Patterns
 
 ### Pattern 1: CLI with File Fallback
@@ -236,6 +309,7 @@ They ARE needed for:
 
 ---
 
-**Last Updated:** 2026-02-15
+**Last Updated:** 2026-02-18
 **Status:** Active
 **Principle Introduced:** Mobile App Migration Epic (pj-5)
+**Recent Updates:** 2026-02-18 - Added Multi-Source Aggregation Patterns section (per-source error isolation, source-annotated messages, stdout/stderr separation, JSONL line-by-line parsing) based on lessons from Planning Summary Submodule Integration

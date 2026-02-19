@@ -1,6 +1,6 @@
 # Planning Summary Process
 
-**Purpose:** Display execution status and summary information for beads task tracking.
+**Purpose:** Display execution status and summary information for beads task tracking across Hentown and all git submodules.
 
 **Status:** Documented
 
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The planning-summary process provides a comprehensive view of task execution status:
+The planning-summary process provides a comprehensive view of task execution status across all active projects:
 
 1. **Recently closed beads** - What work was completed
 2. **In-progress beads** - What's currently being worked on
@@ -20,7 +20,20 @@ The planning-summary process provides a comprehensive view of task execution sta
 4. **Blocked beads** - What's waiting on dependencies
 5. **Failure beads** - What needs human intervention
 
-This provides visibility into project progress without reading individual beads.
+This provides unified visibility across Hentown and all git submodules in a single command.
+Submodules with a `.beads/` directory are automatically discovered and included.
+
+### Multi-Project Support
+
+By default, the script:
+- Reads beads from the root Hentown `.beads/` directory
+- Discovers git submodules from `.gitmodules`
+- Includes beads from any submodule that has a `.beads/` directory
+- Displays each project with a labeled header section
+- Shows aggregate statistics across all projects at the end
+
+Use `--no-submodules` to view only root project beads, or `--submodules name1,name2` to
+include only specific submodules.
 
 ---
 
@@ -45,8 +58,14 @@ This provides visibility into project progress without reading individual beads.
 ### Basic Summary
 
 ```bash
-# Show all beads by status
+# Show all beads by status (includes submodules by default)
 python3 docs/system-prompts/planning-summary.py
+
+# Root project only (no submodules)
+python3 docs/system-prompts/planning-summary.py --no-submodules
+
+# Specific submodules only
+python3 docs/system-prompts/planning-summary.py --submodules cackle,pigeon
 ```
 
 **Example output:**
@@ -522,7 +541,7 @@ python3 docs/system-prompts/planning-summary.py | mail -s "Daily Status Report" 
 ### planning-summary.py Usage
 
 ```bash
-# Default: show all categories
+# Default: show all categories (includes all submodules)
 python3 docs/system-prompts/planning-summary.py
 
 # Filter by status
@@ -547,6 +566,12 @@ python3 docs/system-prompts/planning-summary.py --status closed --limit 10
 
 # Show all (no limit)
 python3 docs/system-prompts/planning-summary.py --status closed --limit 0
+
+# Root project only (skip submodules)
+python3 docs/system-prompts/planning-summary.py --no-submodules
+
+# Include only specific submodules
+python3 docs/system-prompts/planning-summary.py --submodules cackle,pigeon
 ```
 
 ---
@@ -683,4 +708,5 @@ sudo ntpdate pool.ntp.org
 
 ---
 
-**Last Updated:** 2026-02-15
+**Last Updated:** 2026-02-18
+**Recent Updates:** 2026-02-18 - Added multi-project support documentation (submodule discovery, `--no-submodules`, `--submodules` flags)
