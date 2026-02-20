@@ -1,0 +1,10 @@
+[Unit]
+Description=Restart Pigeon service
+Documentation=file:///opt/pigeon/README.md
+After=network.target
+Requires=pigeon.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/systemctl restart pigeon

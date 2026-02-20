@@ -1,0 +1,15 @@
+[Unit]
+Description=Daily restart timer for Pigeon service
+Documentation=file:///opt/pigeon/README.md
+
+[Timer]
+# Restart daily at 2 AM
+OnCalendar=daily
+OnCalendar=*-*-* 02:00:00
+
+# Allow up to 1 hour for the restart
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

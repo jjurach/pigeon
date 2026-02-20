@@ -1,0 +1,49 @@
+[Unit]
+Description=Pigeon - Automation service for voice recordings and text ingestion
+Documentation=file:///opt/pigeon/README.md
+After=network.target
+Wants=pigeon-restart.timer
+
+[Service]
+Type=simple
+User=pigeon
+Group=pigeon
+WorkingDirectory=/opt/pigeon
+
+# Environment configuration
+EnvironmentFile=/etc/pigeon/pigeon.env
+Environment="PIGEON_INBOX_DIR=/var/lib/pigeon/inbox"
+Environment="PIGEON_ARCHIVE_DIR=/var/lib/pigeon/inbox-archive"
+
+# Run the pigeon daemon
+ExecStart=/opt/pigeon/venv/bin/pigeon start
+
+# Auto-restart on failure
+Restart=on-failure
+RestartSec=10
+MaxStartDelay=30
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pigeon
+
+# Resource limits
+MemoryLimit=512M
+MemoryAccounting=true
+CPUQuota=50%
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pigeon /var/log/pigeon
+
+# Graceful shutdown
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
