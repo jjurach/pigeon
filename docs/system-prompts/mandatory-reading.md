@@ -17,7 +17,7 @@ These files define:
 ## The Mandatory Reading List
 
 ### 1. Core Workflow
-**File:** [docs/system-prompts/workflows/logs-first.md](workflows/logs-first.md)
+**File:** [docs/system-prompts/workflows/logs-first.md](./workflows/logs-first.md)
 
 **What it contains:**
 - 5-step workflow (Analyze Request → Create Spec → Create Plan → Get Approval → Implement & Document)

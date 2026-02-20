@@ -58,6 +58,7 @@ TRANSIENT_DIRS = {
     "node_modules",
     "venv",
     "__pycache__",
+    "tools",
 }
 
 # Allowlisted back-references (intentional project integration links)
@@ -270,10 +271,10 @@ class DocumentScanner:
         all_md_files = list(self.project_root.rglob("*.md"))
 
         for md_file in all_md_files:
-            if ".git" in str(md_file):
-                continue
-
             relative_path = str(md_file.relative_to(self.project_root))
+            if any(f"/{d}/" in f"/{relative_path}" or relative_path.startswith(f"{d}/")
+                   for d in TRANSIENT_DIRS):
+                continue
             with open(md_file, "r", encoding="utf-8") as f:
                 content = f.read()
 
@@ -493,9 +494,6 @@ class DocumentScanner:
         all_md_files = list(self.project_root.rglob("*.md"))
 
         for md_file in all_md_files:
-            if ".git" in str(md_file):
-                continue
-
             relative_path = str(md_file.relative_to(self.project_root))
 
             # Skip transient directories (working documents, not canonical)

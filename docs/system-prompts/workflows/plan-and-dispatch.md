@@ -60,6 +60,65 @@ This workflow maintains the logs-first audit trail (Spec → Plan → Changes) w
 
 ---
 
+## Multi-Project Bead Placement Strategy
+
+> **Rule:** When a project plan requires changes across multiple submodule projects, **all beads
+> (approval and implementation) must be created in the top-level parent repo** — not split across
+> submodules and not placed in a single submodule that then references sibling projects.
+
+### Why This Matters
+
+The `bd dep` system enforces dependencies **within a single bead database only**. Cross-repo
+dependency wiring fails silently: `bd dep add child-bead parent-bead` will error if the two
+beads live in different repos. This means:
+
+- **`bd ready` cannot enforce cross-project prerequisites** if beads are split across repos.
+  A worker would see a bead as ready even though a mellona phase it depends on hasn't closed yet.
+- **Agents must be able to see the full dependency graph** in one place. When an agent works a
+  bead, it runs `bd show` and `bd ready` from the repo where that bead lives — it cannot
+  inspect blockers that live in a different repo's database.
+- **Approval gates would be ineffective** if the approval bead is in hentown but the
+  implementation beads are in submodule repos — closing the approval bead does nothing to
+  unblock the implementation beads.
+
+### The Rule in Practice
+
+**Single-project work** — changes are self-contained within one submodule:
+→ Beads may live in that submodule's own bead database.
+
+**Cross-project work** — changes touch two or more submodules (or a submodule and the parent):
+→ All beads live in the **top-level parent repo** (e.g., `hentown`).
+→ Each bead's description notes which repo(s) it touches: `repo:modules/mellona`.
+→ The agent implementing the bead is expected to cd into the relevant repo(s) as needed.
+
+### Example
+
+A plan that adds a feature to `mellona` (library) and then integrates it into `second_voice` (app):
+
+```bash
+# ✅ Correct — all in hentown
+cd /path/to/hentown
+bd create "mellona Ph1: Add sync wrappers"    # hentown-abc  repo:modules/mellona
+bd create "sv Ph1: Integrate sync wrappers"   # hentown-def  repo:modules/second_voice
+bd dep add hentown-def hentown-abc            # enforced ✓
+
+# ❌ Wrong — split across repos, cross-dep cannot be wired
+cd modules/mellona  && bd create "Ph1: Add sync wrappers"  # mellona-abc
+cd modules/second_voice && bd create "Ph1: Integrate"      # sv-def
+bd dep add sv-def mellona-abc                              # ERROR: mellona-abc not found
+```
+
+### Checklist Before Creating Beads for a Multi-Project Plan
+
+- [ ] Does this plan touch more than one submodule or the parent + a submodule?
+  - **Yes →** Create all beads in the top-level parent repo.
+  - **No →** Beads may live in the relevant submodule's own database.
+- [ ] Does each bead description clearly indicate which repo it operates in?
+- [ ] Are all cross-project `bd dep add` calls resolvable from a single repo?
+- [ ] Will `bd ready` in the top-level repo correctly reflect the full unblocked state?
+
+---
+
 ## Bead Patterns
 
 All beads use labels (`--label <type>`) to encode their purpose.

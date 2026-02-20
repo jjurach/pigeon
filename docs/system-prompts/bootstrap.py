@@ -294,14 +294,23 @@ class Bootstrap:
         if language is None:
             language = self._detect_language()
 
+        # Only include language-specific DoD link if the file actually exists
+        lang_dod_path = os.path.join(self.system_prompts_dir, "languages", language, "definition-of-done.md")
+        lang_dod_link = (
+            f"- [{language.capitalize()} DoD](docs/system-prompts/languages/{language}/definition-of-done.md) - "
+            "Agent Kernel language requirements\n"
+            if os.path.exists(lang_dod_path)
+            else ""
+        )
+
         headers = {
             "PRINCIPLES": (
                 "This section is maintained by the Agent Kernel. "
                 "For the complete, authoritative version, see:\n"
                 "- [Universal DoD](docs/system-prompts/principles/definition-of-done.md) - "
                 "Agent Kernel universal requirements\n"
-                f"- [{language.capitalize()} DoD](docs/system-prompts/languages/{language}/definition-of-done.md) - "
-                "Agent Kernel language requirements\n\n"
+                + lang_dod_link +
+                "\n"
                 "**Project-specific extensions:** See [docs/definition-of-done.md](docs/definition-of-done.md)\n\n"
                 "---\n\n"
             ),

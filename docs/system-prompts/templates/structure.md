@@ -148,10 +148,33 @@ This document defines the standard templates for Spec Files, Project Plans, and 
 - **Medium Risk:** [Potential issues and mitigation]
 - **High Risk:** [Critical dependencies or complex changes]
 
-## Lessons Learned (Self-Healing)
-- [This section is for documenting insights discovered during implementation]
-- [Subsequent tasks should check this section to avoid repeating mistakes]
-- [Agents: Update this section as you learn things that would help future tasks]
+## Lessons Learned - Running Log (Self-Healing)
+
+**Purpose:** Capture insights and patterns discovered during implementation. This log should be updated during each phase's change documentation, then synthesized at epic closure.
+
+**For Epic Coordinators:** Review this section at phase review checkpoints (Phase 5, 10, 15) to identify emerging patterns and adjust remaining phases.
+
+**For Implementation Teams:** Update this section in each phase's change documentation with:
+- Technical patterns that emerged
+- Workflow friction points
+- Reusable solutions or anti-patterns
+- Architectural decisions and rationale
+
+### Running Log Template (updated per phase):
+```markdown
+#### Phase N: [Phase Name]
+**Date Completed:** YYYY-MM-DD
+**Key Insights:**
+- [Technical pattern or insight 1]
+- [Workflow friction or solution 2]
+- [Architectural decision with rationale]
+
+**Applicable to Future Phases:**
+- [Recommendation 1]
+- [Recommendation 2]
+```
+
+**Synthesis:** At epic closure (Phase 15 for self-healing), compile patterns from this log into system prompt improvements and workflow documentation.
 
 ## Estimated Scope
 - **New code:** ~X lines
@@ -327,6 +350,24 @@ This change satisfies:
 - ✅ Code quality (follows project patterns)
 - ✅ Documentation (updated in docs/)
 - ✅ Dependencies (in requirements.txt and pyproject.toml)
+
+## Scope Adjustments
+
+[Optional: Record any intentional deviations from the original plan, including omitted deliverables and rationale]
+
+**If no adjustments:** This section may be omitted if all planned deliverables were completed.
+
+**Example:**
+```markdown
+### Omitted Deliverables
+- **`--include-submodules` flag** - Reason: Decided that recursive processing adds complexity without corresponding benefit. Plan to revisit in Phase 5 if user feedback indicates need.
+- **Docker deployment config** - Reason: User indicated systemd service was sufficient for MVP; defer containerization to post-release.
+
+### Added Deliverables
+- **Error recovery mechanism** - Added during implementation to handle corrupt data files gracefully (discovered as important gap during testing).
+```
+
+---
 
 ## Workflow & Tooling Feedback
 [Optional: specific friction points with beads, system prompts, or the workflow itself]
