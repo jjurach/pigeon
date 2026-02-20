@@ -1,0 +1,73 @@
+# Pigeon Configuration Example
+# Copy this file to ~/.config/pigeon/config.yaml and customize for your setup
+
+# Google Drive Configuration
+google:
+  # Folder path in Google Drive to poll for voice recordings
+  drive_folder: "/Voice Recordings"
+
+  # Google authentication profile (from google-personal-mcp)
+  auth_profile: "default"
+
+# Slack Configuration (optional)
+slack:
+  # Enable Slack integration
+  enabled: false
+
+  # Slack bot token (from your Slack app)
+  # Can also be set via PIGEON_SLACK_BOT_TOKEN environment variable
+  bot_token: ""
+
+  # Channels to listen to (comma-separated)
+  channels: "voice-input,specs"
+
+  # Authorized user IDs that can submit specs (optional)
+  # Leave empty to allow all users
+  authorized_users: []
+
+# Processing Configuration
+processing:
+  # Enable STT (Speech-to-Text) processing
+  enable_stt: true
+
+  # Enable text professionalization via LLM
+  enable_professionalize: true
+
+  # Mellona profile to use for LLM processing
+  mellona_profile: "worker"
+
+# Polling Configuration
+polling:
+  # Interval between polls in seconds
+  interval: 60
+
+  # How long to wait before assuming a file is stuck
+  timeout: 300
+
+# Inbox Configuration
+inbox:
+  # Directory where processed specs are written
+  # Relative paths are resolved relative to hentown root
+  directory: "dev_notes/inbox"
+
+  # Archive directory for processed files
+  archive_directory: "dev_notes/inbox-archive"
+
+# Logging Configuration
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: INFO
+
+  # Log file path (empty for stderr only)
+  file: ""
+
+  # Maximum log file size in MB before rotation
+  max_size_mb: 10
+
+# Development/Testing Configuration
+debug:
+  # Enable debug logging
+  enabled: false
+
+  # Don't actually delete files from sources
+  dry_run: false

@@ -5,19 +5,38 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pigeon"
 version = "0.1.0"
-description = "Google Drive polling service for voice recordings"
+description = "Automation module for ingesting voice recordings and text from multiple sources, processing through pipelines, and routing to submodules"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "hentown project"}
+    {name = "Cackle Team", email = "dev@cackle.local"}
+]
+keywords = ["automation", "voice", "recording", "slack", "google-drive", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio",
 ]
 
 dependencies = [
+    "mellona>=0.1.0",
     "google-api-python-client>=2.90",
     "google-auth-oauthlib>=1.2",
     "google-auth>=2.26",
     "python-dotenv>=1.0",
+    "requests>=2.28.0",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "slack-sdk>=3.23.0",
 ]
 
 [project.optional-dependencies]
@@ -25,16 +44,71 @@ dev = [
     "pytest>=7.4",
     "pytest-asyncio>=0.21",
     "pytest-mock>=3.12",
+    "pytest-cov>=6.0.0",
     "black>=23.12",
+    "mypy>=1.8.0",
+    "ruff>=0.0.275",
 ]
+
+[project.urls]
+Homepage = "https://github.com/cackletech/pigeon"
+Repository = "https://github.com/cackletech/pigeon.git"
+Issues = "https://github.com/cackletech/pigeon/issues"
 
 [project.scripts]
 pigeon = "pigeon.main:main"
 
 [tool.setuptools]
-packages = ["pigeon"]
+packages = ["pigeon", "pigeon.sources", "pigeon.processors", "pigeon.routing"]
 package-dir = {"" = "src"}
 
 [tool.black]
 line-length = 100
-target-version = ["py310"]
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict_optional = true
+
+[tool.pytest.ini_options]
+minversion = "7.4"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "strict"
+addopts = "-v --strict-markers"
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
