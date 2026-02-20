@@ -2,7 +2,7 @@
 
 import pytest
 from pathlib import Path
-from pigeon.routing import ProjectRouter, BeadCreator
+from pigeon.routing import ProjectRouter, BeadCreator, SubmoduleDiscoverer
 
 
 class TestProjectRouter:
@@ -153,3 +153,94 @@ class TestBeadCreator:
         )
 
         # Should complete without exception
+
+
+class TestSubmoduleDiscoverer:
+    """Test submodule discovery logic."""
+
+    @pytest.fixture
+    def git_repo(self, tmp_path):
+        """Create a mock git repository with submodules."""
+        # Create .gitmodules file
+        gitmodules = tmp_path / ".gitmodules"
+        gitmodules.write_text("""[submodule "test-project"]
+\tpath = modules/test-project
+\turl = https://example.com/test-project.git
+
+[submodule "other-project"]
+\tpath = modules/other-project
+\turl = https://example.com/other-project.git
+""")
+
+        # Create submodule directories
+        for proj in ["test-project", "other-project"]:
+            proj_dir = tmp_path / "modules" / proj
+            proj_dir.mkdir(parents=True)
+            beads_dir = proj_dir / ".beads"
+            beads_dir.mkdir()
+
+        return tmp_path
+
+    def test_init_discovers_submodules(self, git_repo):
+        """Test that discoverer finds configured submodules."""
+        discoverer = SubmoduleDiscoverer(git_repo)
+        submodules = discoverer.get_submodules(with_beads=True)
+        assert len(submodules) >= 2
+
+    def test_discover_with_beads_filter(self, git_repo):
+        """Test filtering by beads support."""
+        # Create a submodule without .beads
+        no_beads_dir = git_repo / "modules" / "no-beads-project"
+        no_beads_dir.mkdir(parents=True, exist_ok=True)
+
+        # Update .gitmodules
+        gitmodules = git_repo / ".gitmodules"
+        gitmodules.write_text(gitmodules.read_text() + """
+[submodule "no-beads-project"]
+\tpath = modules/no-beads-project
+\turl = https://example.com/no-beads-project.git
+""")
+
+        discoverer = SubmoduleDiscoverer(git_repo)
+
+        # Get all submodules
+        all_modules = discoverer.get_submodules(with_beads=False)
+        assert len(all_modules) >= 2
+
+        # Get only with beads
+        beads_modules = discoverer.get_submodules(with_beads=True)
+        assert all(m['has_beads'] for m in beads_modules)
+
+    def test_find_submodule_by_name(self, git_repo):
+        """Test finding submodule by name."""
+        discoverer = SubmoduleDiscoverer(git_repo)
+        found = discoverer.find_submodule_for_project("test-project")
+        assert found is not None
+        assert found['name'] == "test-project"
+
+    def test_list_project_names(self, git_repo):
+        """Test listing all project names."""
+        discoverer = SubmoduleDiscoverer(git_repo)
+        projects = discoverer.list_project_names(with_beads=True)
+        assert "test-project" in projects or "other-project" in projects
+
+    def test_handles_missing_gitmodules(self, tmp_path):
+        """Test graceful handling when .gitmodules doesn't exist."""
+        discoverer = SubmoduleDiscoverer(tmp_path)
+        # Should not raise exception
+        submodules = discoverer.get_submodules(with_beads=False)
+        assert submodules == []
+
+    def test_handles_uninitialized_submodule(self, tmp_path):
+        """Test handling of uninitialized submodules."""
+        # Create .gitmodules pointing to non-existent directory
+        gitmodules = tmp_path / ".gitmodules"
+        gitmodules.write_text("""[submodule "missing-project"]
+\tpath = modules/missing-project
+\turl = https://example.com/missing-project.git
+""")
+
+        discoverer = SubmoduleDiscoverer(tmp_path)
+        submodules = discoverer.get_submodules(with_beads=False)
+        # Should skip uninitialized submodule
+        assert not any(s['name'] == "missing-project" for s in submodules)

@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Optional, List, Dict
 
+from .submodules import SubmoduleDiscoverer
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,25 +19,34 @@ class ProjectRouter:
         Args:
             hentown_root: Path to hentown repository root.
         """
-        self.hentown_root = hentown_root
-        self.modules_dir = hentown_root / "modules"
+        self.hentown_root = Path(hentown_root)
+        self.modules_dir = self.hentown_root / "modules"
         self.cache: Dict[str, Path] = {}
+        self._discoverer = SubmoduleDiscoverer(self.hentown_root)
         self._discover_projects()
 
     def _discover_projects(self) -> None:
         """Discover available projects with beads support.
 
-        Looks for modules with .beads/ directory.
+        Uses git submodule discovery to find projects.
+        Falls back to directory scanning if submodule discovery fails.
         """
-        if not self.modules_dir.exists():
-            logger.warning(f"Modules directory not found: {self.modules_dir}")
-            return
+        # First try submodule discovery
+        submodules = self._discoverer.get_submodules(with_beads=True)
+        for submodule in submodules:
+            project_path = Path(submodule['absolute_path'])
+            if project_path.exists():
+                self.cache[submodule['name']] = project_path
+                logger.debug(f"Discovered project from submodule: {submodule['name']}")
 
-        for subdir in self.modules_dir.iterdir():
-            if subdir.is_dir() and (subdir / ".beads").exists():
-                project_name = subdir.name
-                self.cache[project_name] = subdir
-                logger.debug(f"Discovered project: {project_name}")
+        # Fallback: also check modules directory directly (for non-submodule projects)
+        if self.modules_dir.exists():
+            for subdir in self.modules_dir.iterdir():
+                if subdir.is_dir() and (subdir / ".beads").exists():
+                    project_name = subdir.name
+                    if project_name not in self.cache:  # Don't override submodule discovery
+                        self.cache[project_name] = subdir
+                        logger.debug(f"Discovered project from modules dir: {project_name}")
 
         logger.info(f"Discovered {len(self.cache)} projects with beads support")
 
