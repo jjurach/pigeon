@@ -21,6 +21,7 @@ This directory contains the "ideal state" documentation for:
 docs/system-prompts/
 ├── bootstrap.py                 # Tool to inject/maintain sections in AGENTS.md
 ├── docscan.py                   # Document integrity scanner
+├── planning-running.py          # Inspect running AI agent processes
 ├── README.md                    # This file
 ├── principles/
 │   └── definition-of-done.md    # Universal DoD criteria
