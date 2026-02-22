@@ -13,7 +13,7 @@ The **Clarify Questions Process** enables agents to:
 5. **Iterate** interactively with human on resume
 6. **Adjust** future work based on answers
 
-This process applies to **any project with `docs/system-prompts/`** and is **universal across hentown ecosystem**.
+This process applies to **any project with `docs/system-prompts/`** and is **universal across all projects in the ecosystem**.
 
 ---
 
@@ -65,8 +65,8 @@ Agent performs:
    - Note Python/standards compliance, maintainability concerns
 
 5. Check for related projects' work
-   - For hentown: check hatchery, pigeon, mellona
-   - For submodules: check hentown coordination hub
+   - For parent projects: check all submodule projects
+   - For submodules: check parent project coordination hub
    - Identify integration points, dependencies, patterns
 ```
 

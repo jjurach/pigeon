@@ -37,26 +37,26 @@ maintainability / team understanding / performance characteristics]
 ### Question 1: Slack Channel Architecture—Dedicated vs. Shared Channels?
 
 **Context**:
-Recent research shows hatchery and pigeon both need Slack presence. Current hentown
-uses dedicated channels (#hentown-activity, #hentown-inbox). Pigeon could post to
-#hentown-inbox OR create its own #pigeon-activity channel.
+Recent research shows multiple projects need Slack presence. The top-level project
+uses dedicated channels (#activity, #inbox). New projects could post to these shared
+channels OR create dedicated project channels.
 
 **Options**:
-- Option A: **Unified Channel** - Both pigeon and hatchery post status to #hentown-activity
+- Option A: **Unified Channels** - All projects post status to #activity
   (Pros: Single pane of glass for all automation; Cons: more noise, harder to filter)
-- Option B: **Dedicated Channels** - hatchery→#hentown-activity, pigeon→#pigeon-activity
-  (Pros: clear separation, each team owns their channel; Cons: user must monitor multiple channels)
-- Option C: **Hybrid** - Activity goes to dedicated channels, high-priority alerts to #hentown-activity
+- Option B: **Dedicated Channels** - Each project→their own #project-activity channel
+  (Pros: clear separation, each project owns their channel; Cons: users must monitor multiple channels)
+- Option C: **Hybrid** - Activity goes to dedicated channels, high-priority alerts to shared #activity
   (Pros: detailed info where it belongs, critical alerts visible everywhere; Cons: complexity in priority logic)
 
 **Why This Matters**:
 This shapes how notifications are organized, affects user experience (information density),
-and sets pattern for future modules (mellona, logist, etc.) that will also need Slack integration.
+and sets pattern for future projects that will also need Slack integration.
 
 **Related Recent Work**:
 - Commit: 9e6d746 (hatchery Epic 5 planning)
 - Spec: dev_notes/project_plans/2026-02-19_00-07-17_hatchery-epic-5-slack-integration.md
-- Bead: hentown-aog (mellona Ph5 - similar notification patterns needed)
+- Bead: {related_bead_id} (related phase - similar notification patterns needed)
 ```
 
 ---
@@ -104,7 +104,7 @@ management. Recent mellona work established a config hierarchy pattern.
   (Pros: already works, team familiar; Cons: credentials in .env during development, doesn't scale)
 - Option B: **Secrets Manager (OS-level)** - Use keyring/python-keyring, fallback to env vars
   (Pros: encrypted storage, production-ready; Cons: requires setup, more complex for dev)
-- Option C: **Config Hierarchy (as mellona does)** - ~/.config/hentown/ for user, env vars as override
+- Option C: **Config Hierarchy** - ~/.config/{project_name}/ for user, env vars as override
   (Pros: scalable, follows modern Python conventions; Cons: more code, requires documentation)
 
 **Why This Matters**:
@@ -114,7 +114,7 @@ deployment complexity / how other projects (pigeon, mellona) will integrate Slac
 **Related Recent Work**:
 - Spec: dev_notes/specs/2026-02-18_mellona-pigeon-specification.md (config patterns)
 - Commit: d6d9f27 (mellona keys CLI - keyring backend integration)
-- Bead: hentown-5dm (keyring backend implementation)
+- Bead: {example_bead_id} (keyring backend implementation)
 ```
 
 ---
@@ -174,7 +174,7 @@ modules / team time investment / user confidence in integration reliability.
 
 **Related Recent Work**:
 - Spec: dev_notes/project_plans/2026-02-19_00-07-17_hatchery-epic-5-slack-integration.md
-- Bead: hentown-ddx (documentation patterns from mellona/pigeon integration work)
+- Bead: {related_bead_id} (documentation patterns from project integration work)
 ```
 
 ---
@@ -213,7 +213,7 @@ contributor friction / consistency with other modules / ability to adapt to new 
 **Context**:
 Slack connection is network-dependent. Research shows hatchery daemon should be resilient
 to network failures, credential expiry, rate limits. Recent mellona work on provider
-fallback chains showed complexity of retry logic. Current hentown patterns are minimal.
+fallback chains showed complexity of retry logic. Current project patterns are minimal.
 
 **Options**:
 - Option A: **Minimal** - Log errors, continue daemon, manual recovery
@@ -233,7 +233,7 @@ mellona also depend on Slack reliability).
 
 **Related Recent Work**:
 - Spec: dev_notes/specs/2026-02-20_23-35-00.md (executor pool error handling)
-- Lessons Learned: (from hentown builds, network resilience issues)
+- Lessons Learned: (from project builds, network resilience issues)
 ```
 
 ---
@@ -247,7 +247,7 @@ mellona also depend on Slack reliability).
 ### Question N: [Feature] Cross-Module—[Consistency Point]?
 
 **Context**:
-This work affects [modules/projects]. Each has [different state/pattern]. Research
+This work affects [submodule_projects]. Each has [different state/pattern]. Research
 shows [recent decisions in related projects]. Future work [related feature] depends
 on how we decide this.
 
@@ -275,7 +275,7 @@ efforts.
 **Context**:
 Hatchery, pigeon, and mellona all need Slack presence. Research shows:
 - hatchery needs activity notifications + interactive commands
-- pigeon needs #hentown-inbox listener + message routing
+- Project needs shared inbox listener + message routing
 - mellona might eventually need execution status updates
 
 Current plan: separate SlackClient implementations in each. But this duplicates:
@@ -286,7 +286,7 @@ established shared library pattern for LLM providers.
 - Option A: **Separate Clients** - Each project owns its Slack integration
   (Pros: autonomy, no cross-project coordination; Cons: duplicate code, inconsistent
   error handling, hard to upgrade shared behavior)
-- Option B: **Shared Slack Library** - Create mellona-slack (or hentown-slack) for
+- Option B: **Shared Slack Library** - Create shared-slack (reusable) for
   common patterns, projects build on top
   (Pros: DRY, consistent behavior, easier maintenance; Cons: upfront effort, coordination
   overhead, future integration work)
@@ -302,7 +302,7 @@ risk of inconsistent user experience across modules.
 **Related Recent Work**:
 - Architecture: mellona library design (shared provider abstraction)
 - Spec: dev_notes/specs/2026-02-18_mellona-pigeon-specification.md
-- Epic: pigeon + hatchery Slack integration beads (hentown-ye5, hentown-6ge)
+- Epic: Project Slack integration beads ({bead_id_1}, {bead_id_2})
 ```
 
 ---

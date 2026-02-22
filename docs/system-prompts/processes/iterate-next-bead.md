@@ -1,8 +1,76 @@
-# iterate-next-bead.md — Workflow for Progressing Hatchery Beads
+# iterate-next-bead.md — IMPROVED VERSION
 
-**Purpose:** Guide any agent (Claude Code, Gemini, etc.) through the process of claiming, executing, and completing the next ready bead in the hatchery project, with built-in safeguards for stalled processes and multi-terminal coordination.
+**Purpose:** Guide any agent through the process of claiming, executing, and completing the next ready bead in the hatchery project, with built-in safeguards for stalled processes and multi-terminal coordination.
 
 **This document is the interim bead execution workflow** until hatchery daemon is implemented.
+
+---
+
+## Quick Reference: What to Do
+
+When you see "apply iterate-next-bead.md process":
+
+1. **Claim** the bead → `bd update {id} --status=in_progress`
+2. **Assess** if work is needed → Check if code already exists
+3. **Implement** the gap (if any) → Write code, run tests
+4. **Verify** criteria → Tests pass, acceptance criteria met
+5. **Close** and commit → `bd update {id} --status closed`
+
+---
+
+## Terminology Note
+
+⚠️ **"Phases" Used in Two Contexts:**
+
+- **Workflow Phase** = Step in THIS process (1-8)
+- **Epic Phase** = Implementation phase from project plan (e.g., "Phase 2-4")
+
+Example:
+- Bead description: "E1-B Phase 2-4" ← Epic phases
+- This process: "Phase 6: Implement the Gap" ← Workflow phase
+
+---
+
+## Bead Execution Decision Tree
+
+```
+START: Bead is ready (bd ready shows it)
+  ↓
+[Phase 1-3] Assess environment and find next bead
+  ↓
+[Phase 4] Claim the bead
+  ├─ bd update {id} --status=in_progress
+  └─ bd show {id} to get full requirements
+  ↓
+[Phase 5] Determine execution type
+  ├─ Is this INTERACTIVE? (needs human input/decision)
+  │  └─ YES → HALT, wait for human
+  └─ Is this NON-INTERACTIVE?
+     └─ YES → Continue to Phase 5.4
+  ↓
+[Phase 5.4 NEW] Check what work actually needs doing
+  ├─ All acceptance criteria already met?
+  │  └─ YES → Skip to Phase 7 (Close immediately)
+  └─ Some/all criteria not yet met?
+     └─ YES → Continue to Phase 6 (Implement gap)
+  ↓
+[Phase 6] Implement and test
+  ├─ 6.1: Understand what needs to be done
+  ├─ 6.2: Write code, run tests, iterate
+  ├─ 6.3: Handle errors (fix or document)
+  └─ 6.4: Verify acceptance criteria met
+  ↓
+[Phase 7] Close the bead and commit
+  ├─ bd update {id} --status closed
+  ├─ bd sync (commit bead changes)
+  ├─ git add / git commit / git push (commit your code)
+  └─ Document in change notes
+  ↓
+[Phase 8] Loop or halt
+  ├─ bd ready (check for more work)
+  └─ If ready beads exist → Go back to Phase 3
+     Else → Halt (no more work)
+```
 
 ---
 
@@ -107,11 +175,11 @@ After processing all in-progress beads, print summary:
 ```
 === HEALTH CHECK SUMMARY ===
 ✓ Recovered: 2 beads from stalled processes
-→ hentown-pew (stalled 2h15m)
-→ hentown-6m0 (stalled 1h30m)
+→ {bead_id_1} (stalled 2h15m)
+→ {bead_id_2} (stalled 1h30m)
 
 ⏳ Still Working: 1 bead
-→ hentown-aen (PID 40604, 18 min)
+→ {bead_id_3} (PID 40604, 18 min)
 
 Ready to proceed to next bead ✓
 ```
@@ -139,10 +207,10 @@ If `bd ready` returns empty:
 2. **Identify root blockers:**
    ```
    Example output:
-   hentown-pew (in_progress, 45 min)
-     ← blocks: hentown-6m0, hentown-aen
-   hentown-blx (in_progress, 2h30m)
-     ← blocks: hentown-6ge
+   {bead_id_1} (in_progress, 45 min)
+     ← blocks: {bead_id_2}, {bead_id_3}
+   {bead_id_4} (in_progress, 2h30m)
+     ← blocks: {bead_id_5}
    ```
 
 3. **Decision:**
@@ -189,9 +257,6 @@ IF grabbed_by_pid is set AND NOT empty:
 bd update {NEXT_BEAD} \
   --status=in_progress \
   --notes="Claimed by {agent_type} PID {my_pid}"
-
-# Optional: Store PID in custom field (if bd supports it):
-# bd update {NEXT_BEAD} --metadata='{"grabbed_by_pid": {my_pid}, "grabbed_at": "{iso_timestamp}"}'
 ```
 
 ### Step 4.4: Fetch Bead Details
@@ -201,7 +266,7 @@ bd show {NEXT_BEAD}
 ```
 
 Review:
-- Title and description
+- Title and description (what is the work?)
 - Dependencies (what must be done first?)
 - Related files/documentation
 - Any previous notes
@@ -252,34 +317,152 @@ Later: When human provides answers:
 If NON-INTERACTIVE:
 
 ```
-Proceed to Phase 6 (Execution)
+Proceed to Phase 5.4 (Pre-Implementation Completeness Check)
 ```
 
 ---
 
-## Phase 6: Execute the Bead
+## Phase 5.4: Pre-Implementation Completeness Check (NEW)
 
-### Step 6.1: Understand the Scope
+**⭐ KEY ADDITION:** Before assuming work needs doing, verify what's already complete.
 
-Read the bead description and understand:
-- What code needs to be written?
-- What tests need to pass?
-- What files are involved?
-- What's the acceptance criteria?
+### Step 5.4.1: Understand Acceptance Criteria
 
-Reference the related epic planning document (if it exists).
+Read the bead description carefully:
 
-### Step 6.2: Execute the Work
+```bash
+# Display bead details again
+bd show {NEXT_BEAD}
+```
 
-Implement according to the bead's scope:
+Answer:
+- What exactly must this bead accomplish?
+- What files must be created/modified/deleted?
+- What tests must pass?
+- What integration points must work?
+
+### Step 5.4.2: Check Current State
+
+**For each file/component mentioned in the bead:**
+
+```bash
+# Check if file exists
+ls -la {file_path}
+
+# Check if directory is empty
+find {directory} -type f | head -10
+
+# Check git status (has it changed recently?)
+git log -1 --oneline {file_path}
+```
+
+### Step 5.4.3: Run Existing Tests (if any)
+
+```bash
+# From the project directory
+cd {project_root}
+
+# Run tests for this component
+pytest tests/test_{component}.py -v
+
+# Or run all tests
+pytest -v
+```
+
+**Note:** Tests may pass even if work seems incomplete - that's OK, indicates work is done!
+
+### Step 5.4.4: Compare Current State to Acceptance Criteria
+
+Create a mental checklist:
+
+```
+BEAD: {bead_id} - {title}
+
+ACCEPTANCE CRITERIA (from bead description):
+□ Criterion 1: {specific requirement}
+□ Criterion 2: {specific requirement}
+□ Criterion 3: {specific requirement}
+...
+
+CURRENT STATE:
+✓ Criterion 1: ALREADY MET (test_xyz.py passes, code exists)
+✓ Criterion 2: ALREADY MET (function works as expected)
+✗ Criterion 3: NOT MET (missing feature)
+? Criterion 4: UNCLEAR (need to test)
+
+WORK NEEDED (GAP):
+- Implement criterion 3 (add feature X)
+- Verify criterion 4 (test edge case)
+```
+
+### Step 5.4.5: Make Decision
+
+```
+IF all acceptance criteria are already met:
+  → Go to Phase 7 (Close the Bead immediately)
+  → Do NOT re-implement existing working code
+
+ELSE IF some criteria are met, some are not:
+  → Go to Phase 6.2 (Implement ONLY the gap)
+  → Document what was already there
+
+ELSE IF all criteria need work:
+  → Go to Phase 6.1 (Full implementation)
+
+ELSE IF criteria are unclear:
+  → Ask human for clarification
+  → Mark bead with question in notes
+  → Proceed to next ready bead
+```
+
+**Example decisions:**
+
+| Scenario | Action |
+|----------|--------|
+| "config.py exists, tests pass, validates correctly" | Close immediately |
+| "config.py done, discovery.py partially done" | Implement only discovery.py |
+| "Neither config.py nor discovery.py exist" | Full implementation |
+| "Code exists but tests fail" | Debug and fix |
+| "Requirements unclear" | Ask human |
+
+---
+
+## Phase 6: Implement the Gap
+
+### Step 6.1: Understand the Implementation Scope
+
+Based on Phase 5.4, you now know exactly what needs doing.
+
+**Ask yourself:**
+
+- What code needs to be ADDED (new files/functions)?
+- What code needs to be CHANGED (modified existing)?
+- What code needs to be DELETED (cleanup)?
+- What tests need to be ADDED or FIXED?
+- What documentation needs updating?
+
+**Reference the related epic planning document** (if it exists):
+
+```bash
+# Find the epic plan
+find dev_notes/project_plans -name "*epic*" -type f | grep {project}
+
+# Read the relevant section
+cat dev_notes/project_plans/{timestamp}_epic.md | grep -A 20 "Phase {number}"
+```
+
+### Step 6.2: Implement the Work
+
+Implement according to the gap identified in Phase 5.4:
 
 ```bash
 # Typical workflow:
 1. Create/edit code files
-2. Run tests
-3. Commit to git
-4. Test again
-5. Verify acceptance criteria
+2. Run tests locally
+3. Iterate until tests pass
+4. Commit changes to git
+5. Run full test suite again
+6. Verify no regressions
 ```
 
 **Monitoring (for health checks in future sessions):**
@@ -289,40 +472,86 @@ Implement according to the bead's scope:
 
 ### Step 6.3: Handle Execution Errors
 
-If execution fails:
+If something doesn't work:
 
 ```
 1. Attempt to fix the root cause
-2. If fixable: continue to 6.4
+   → Debug the issue
+   → Review error messages
+   → Check related code
+
+2. If fixable:
+   → Fix it
+   → Re-run tests
+   → Continue to 6.4
+
 3. If not fixable:
    → Update bead with error notes:
      bd update {NEXT_BEAD} --notes="Failed: {error_description}"
    → Reset status:
      bd update {NEXT_BEAD} --status=open
    → Report to user/log for review
-   → Proceed to Phase 7 (close loop)
+   → Halt (wait for human intervention)
 ```
 
 ### Step 6.4: Verify Acceptance Criteria
 
-Before closing, confirm:
+Before proceeding to close, verify ALL criteria are met:
 
 ```
+FINAL ACCEPTANCE CHECKLIST:
+
 □ Code written matches bead description
-□ Tests pass (if applicable)
-□ No regressions in related beads
-□ Git commit messages are clear
-□ Acceptance criteria from bead met
+□ All acceptance criteria from bead are met
+□ All tests pass (unit + integration)
+□ No regressions in related code
+□ Git commits have clear messages
+□ No secrets or sensitive data committed
+
+DEFINITION OF DONE (from close-project.md):
+
+Code Quality:
+□ Type hints on public functions
+□ Docstrings on public classes/methods
+□ Code follows project style guide
+□ No obvious bugs or leftover TODOs
+
+Testing:
+□ Unit tests exist for new code
+□ All tests pass locally
+□ Critical paths covered by tests
+□ Edge cases handled
+
+Documentation:
+□ Change documentation created (dev_notes/changes/{timestamp}_*.md)
+□ Linked bead ID to changes
+□ Architecture impacts documented
+□ No breaking changes without migration plan
+
+Git & Commit:
+□ Commits pushed to repo
+□ Commit messages are descriptive
+□ Co-authored properly
 ```
+
+**If any checkbox is unchecked:** Go back to 6.2 and fix it.
+**If all checkboxes are checked:** Proceed to Phase 7.
 
 ---
 
 ## Phase 7: Close the Bead & Sync
 
-### Step 7.1: Close the Bead
+### Step 7.1: Update Bead with Summary
 
 ```bash
-bd close {NEXT_BEAD} --reason="Implementation complete, all tests pass, acceptance criteria met"
+bd update {NEXT_BEAD} --status closed \
+  --append-notes="Implementation complete. All acceptance criteria met. {brief_summary_of_work}"
+```
+
+Example:
+```bash
+bd update {bead_id} --status closed \
+  --append-notes="Config class with validation, Discovery with enumeration, Monitor with polling. 35 tests passing."
 ```
 
 ### Step 7.2: Sync Beads Database
@@ -333,20 +562,83 @@ bd sync
 
 This commits bead changes to git.
 
-### Step 7.3: Commit Code Changes
+### Step 7.3: Create Change Documentation
+
+Create a change documentation file:
 
 ```bash
-git status                    # Verify what's staged
-git add {relevant_files}      # Stage code changes
-git commit -m "{message}"     # Commit with descriptive message
-git push                      # Push to remote (if available)
+timestamp=$(date +%Y-%m-%d_%H-%M-%S)
+cat > dev_notes/changes/${timestamp}_description.md << 'EOF'
+# Change Documentation: {Bead Title}
+
+**Bead:** {bead_id}
+**Date:** {date}
+**Agent:** {your_name}
+
+## Summary
+{1-3 sentence summary of work}
+
+## What Was Already Done
+{List components that existed before}
+
+## What You Added/Changed
+{List new code and modifications}
+
+## Verification
+{List tests run, acceptance criteria verified}
+
+## Files Modified
+- {file_path}
+- {file_path}
+
+## Test Results
+{Paste test output showing all passing}
+
+## Lessons Learned
+{Any insights or process improvements?}
+EOF
+
+git add dev_notes/changes/${timestamp}_description.md
 ```
 
-### Step 7.4: Final Sync
+### Step 7.4: Commit Code Changes
+
+```bash
+# Verify what's staged
+git status
+
+# Stage relevant files (may be already staged from earlier commits)
+git add {relevant_files}
+
+# Commit with bead reference
+git commit -m "$(cat <<'EOF'
+Close {BEAD_ID}: {Brief description of work}
+
+{Slightly longer description of changes}
+
+Test Results: {num} tests passing
+Acceptance Criteria: All met
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
+EOF
+)"
+```
+
+### Step 7.5: Final Sync
 
 ```bash
 bd sync
 ```
+
+Commit bead closure to git (if bead database is git-tracked).
+
+### Step 7.6: Push to Remote (if available)
+
+```bash
+git push
+```
+
+**Note:** May fail in sandbox environments - that's OK.
 
 ---
 
@@ -362,7 +654,8 @@ bd ready
 
 ```
 IF ready beads exist:
-  → Go to Phase 3 (find next bead)
+  → Continue to Phase 3 (find next bead)
+  → You can work on multiple beads in one session!
 
 ELSE:
   → Print: "No more ready beads. All hatchery work blocked or complete."
@@ -394,7 +687,6 @@ If a user needs to interrupt a running agent:
 1. **Find the bead being worked on:**
    ```bash
    bd list --status=in_progress
-   python3 docs/system-prompts/planning-running.py
    ```
 
 2. **Decide action:**
@@ -411,26 +703,28 @@ If a user needs to interrupt a running agent:
 
 ### If You're Claude Code
 
-When you see a bead that's ready:
+When you see "apply iterate-next-bead.md process":
 
 ```
 1. Run: python3 docs/system-prompts/planning-running.py --detailed
 2. Run: bd ready
 3. If stuck: bd blocked (understand why)
-4. If clear: follow this document from Phase 3 onwards
+4. If clear: follow this document from Phase 1 onwards
 5. Claim bead with: bd update {id} --status=in_progress
-6. Execute work
-7. Close with: bd close {id} --reason="..."
-8. Run: bd sync && git push
+6. Execute work (with Phase 5.4 completeness check)
+7. Close with: bd update {id} --status closed --append-notes "..."
+8. Create change documentation
+9. Run: bd sync && git add/commit/push
 ```
 
-### If You're Gemini or Another Agent
+### If You're Another Agent (Gemini, etc.)
 
 Same workflow, different process. The key is:
 - Check health first (Phase 2)
 - Claim safely (Phase 4)
 - Determine interactivity (Phase 5)
-- Execute (Phase 6)
+- Check completeness (Phase 5.4) ← NEW and IMPORTANT
+- Implement only the gap (Phase 6)
 - Close and sync (Phase 7)
 
 ---
@@ -442,6 +736,8 @@ Same workflow, different process. The key is:
 ✓ **Interactive awareness:** Skip beads needing human input
 ✓ **Multi-terminal safe:** PID-based coordination prevents collisions
 ✓ **Self-healing:** Health checks on every iteration
+✓ **Completeness check:** NEW - Verify work is needed before implementing
+✓ **Early exit:** Close immediately if work already done
 
 ---
 
@@ -449,6 +745,6 @@ Same workflow, different process. The key is:
 
 - **planning-running.py:** `docs/system-prompts/planning-running.py`
 - **Beads CLI:** `bd --help`
-- **Hatchery Epics:** `dev_notes/project_plans/2026-02-19_00-07-*.md`
+- **Project Plans:** `dev_notes/project_plans/`
+- **Definition of Done:** `docs/system-prompts/processes/close-project.md`
 - **Git workflow:** `AGENTS.md`
-

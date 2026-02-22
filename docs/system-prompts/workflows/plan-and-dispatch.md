@@ -77,7 +77,7 @@ beads live in different repos. This means:
 - **Agents must be able to see the full dependency graph** in one place. When an agent works a
   bead, it runs `bd show` and `bd ready` from the repo where that bead lives — it cannot
   inspect blockers that live in a different repo's database.
-- **Approval gates would be ineffective** if the approval bead is in hentown but the
+- **Approval gates would be ineffective** if the approval bead is in the top-level project but the
   implementation beads are in submodule repos — closing the approval bead does nothing to
   unblock the implementation beads.
 
@@ -87,25 +87,25 @@ beads live in different repos. This means:
 → Beads may live in that submodule's own bead database.
 
 **Cross-project work** — changes touch two or more submodules (or a submodule and the parent):
-→ All beads live in the **top-level parent repo** (e.g., `hentown`).
-→ Each bead's description notes which repo(s) it touches: `repo:modules/mellona`.
+→ All beads live in the **top-level parent repo**.
+→ Each bead's description notes which repo(s) it touches: `repo:{submodule_name}`.
 → The agent implementing the bead is expected to cd into the relevant repo(s) as needed.
 
 ### Example
 
-A plan that adds a feature to `mellona` (library) and then integrates it into `second_voice` (app):
+A plan that adds a feature to one submodule (e.g., library) and then integrates it into another (e.g., app):
 
 ```bash
-# ✅ Correct — all in hentown
-cd /path/to/hentown
-bd create "mellona Ph1: Add sync wrappers"    # hentown-abc  repo:modules/mellona
-bd create "sv Ph1: Integrate sync wrappers"   # hentown-def  repo:modules/second_voice
-bd dep add hentown-def hentown-abc            # enforced ✓
+# ✅ Correct — all in top-level parent repo
+cd /path/to/project-root
+bd create "lib-name Ph1: Add feature"         # parent-abc  repo:modules/library
+bd create "app-name Ph1: Integrate feature"   # parent-def  repo:modules/app
+bd dep add parent-def parent-abc              # enforced ✓
 
 # ❌ Wrong — split across repos, cross-dep cannot be wired
-cd modules/mellona  && bd create "Ph1: Add sync wrappers"  # mellona-abc
-cd modules/second_voice && bd create "Ph1: Integrate"      # sv-def
-bd dep add sv-def mellona-abc                              # ERROR: mellona-abc not found
+cd modules/library  && bd create "Ph1: Add feature"  # lib-abc
+cd modules/app && bd create "Ph1: Integrate"        # app-def
+bd dep add app-def lib-abc                          # ERROR: lib-abc not found
 ```
 
 ### Checklist Before Creating Beads for a Multi-Project Plan
