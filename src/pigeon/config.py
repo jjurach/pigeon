@@ -3,7 +3,74 @@
 import os
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, List
+
+
+@dataclass
+class SlackConfig:
+    """Configuration for Slack integration."""
+
+    bot_token: str
+    app_token: str
+    inbox_channel: str
+    authorized_user_ids: List[str]
+
+    @classmethod
+    def from_env(cls) -> Optional["SlackConfig"]:
+        """Load Slack configuration from environment variables.
+
+        Returns:
+            SlackConfig: Configuration object if Slack is configured, None otherwise.
+
+        Raises:
+            ValueError: If Slack configuration is invalid.
+        """
+        # Load .env file if it exists
+        env_path = Path(__file__).parent.parent.parent / ".env"
+        if env_path.exists():
+            from dotenv import load_dotenv
+            load_dotenv(env_path)
+
+        # Check if Slack is configured
+        bot_token = os.getenv("PIGEON_SLACK_BOT_TOKEN")
+        app_token = os.getenv("PIGEON_SLACK_APP_TOKEN")
+        inbox_channel = os.getenv("PIGEON_SLACK_INBOX_CHANNEL")
+        authorized_user_ids = os.getenv("PIGEON_SLACK_AUTHORIZED_USER_IDS", "").split(",")
+
+        # If no Slack configuration, return None
+        if not bot_token and not app_token:
+            return None
+
+        # Create and validate config
+        config = cls(
+            bot_token=bot_token or "",
+            app_token=app_token or "",
+            inbox_channel=inbox_channel or "",
+            authorized_user_ids=[uid.strip() for uid in authorized_user_ids if uid.strip()],
+        )
+        config.validate()
+        return config
+
+    def validate(self) -> None:
+        """Validate Slack configuration values.
+
+        Raises:
+            ValueError: If configuration is invalid.
+        """
+        if not self.bot_token:
+            raise ValueError("PIGEON_SLACK_BOT_TOKEN is required for Slack integration")
+
+        if not self.bot_token.startswith("xoxb-"):
+            raise ValueError("PIGEON_SLACK_BOT_TOKEN must be a valid bot token (starts with 'xoxb-')")
+
+        if not self.app_token:
+            raise ValueError("PIGEON_SLACK_APP_TOKEN is required for Slack integration")
+
+        if not self.app_token.startswith("xapp-"):
+            raise ValueError("PIGEON_SLACK_APP_TOKEN must be a valid app token (starts with 'xapp-')")
+
+        if not self.inbox_channel:
+            raise ValueError("PIGEON_SLACK_INBOX_CHANNEL is required for Slack integration")
 
 
 @dataclass
