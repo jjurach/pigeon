@@ -1,5 +1,6 @@
 """Slack Socket Mode listener daemon for Pigeon."""
 
+import json
 import logging
 import signal
 import threading
@@ -88,20 +89,76 @@ class SlackListenerDaemon:
         except Exception as exc:
             logger.warning("SlackListenerDaemon: error during disconnect: %s", exc)
 
+    def _extract_user_id(self, parsed: dict) -> Optional[str]:
+        """Extract the sender's user ID from a parsed Socket Mode message.
+
+        Handles both Events API payloads and bare message objects.
+
+        Args:
+            parsed: Parsed JSON message from the socket.
+
+        Returns:
+            User ID string, or None if not present.
+        """
+        # Events API envelope: {"type": "events_api", "payload": {"event": {...}}}
+        event = parsed.get("payload", {}).get("event", {})
+        if event:
+            return event.get("user") or event.get("bot_id")
+        # Bare message (some Socket Mode clients surface the event directly)
+        return parsed.get("user") or parsed.get("bot_id")
+
+    def _is_authorized_message(self, parsed: dict) -> bool:
+        """Return True if the message should be dispatched to handlers.
+
+        Filters out bot messages and, when an allowlist is configured,
+        messages from users not on the allowlist.
+
+        Args:
+            parsed: Parsed JSON message from the socket.
+
+        Returns:
+            True if the message passes all filters.
+        """
+        user_id = self._extract_user_id(parsed)
+
+        # Messages without a sender (system events, etc.) pass through
+        if user_id is None:
+            return True
+
+        # Drop bot-generated messages
+        if user_id.startswith("B"):
+            logger.debug("SlackListenerDaemon: dropping bot message from %s", user_id)
+            return False
+
+        # If no allowlist configured, accept all human users
+        if not self.config.authorized_user_ids:
+            return True
+
+        if user_id not in self.config.authorized_user_ids:
+            logger.warning(
+                "SlackListenerDaemon: dropping message from unauthorized user %s",
+                user_id,
+            )
+            return False
+
+        return True
+
     def _on_raw_message(self, raw: str) -> None:
         """Callback for each raw WebSocket message string.
 
-        Parses the JSON payload and fans out to registered handlers.
+        Parses the JSON payload, applies authorization filtering, and fans
+        out to registered handlers.
 
         Args:
             raw: Raw JSON string received from the socket.
         """
-        import json
-
         try:
             parsed = json.loads(raw)
         except Exception:
             logger.debug("SlackListenerDaemon: non-JSON message received, skipping")
+            return
+
+        if not self._is_authorized_message(parsed):
             return
 
         for handler in self._message_handlers:
