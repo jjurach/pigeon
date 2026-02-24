@@ -2,9 +2,10 @@
 
 import json
 import logging
+import re
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 
 from .submodules import SubmoduleDiscoverer
 
@@ -93,8 +94,6 @@ class MessageRouter:
         Returns:
             List of detected project names.
         """
-        import re
-
         detected = []
 
         # Pattern 1: "Project: name" or "project: name"
@@ -185,8 +184,6 @@ class MessageRouter:
                 keywords.append(first_line)
 
         # Extract @mentions (likely referring to projects)
-        import re
-
         for match in re.finditer(r"@([a-z0-9\-]+)", content):
             keywords.append(match.group(1))
 
@@ -253,3 +250,280 @@ class MessageRouter:
             Sorted list of project names.
         """
         return sorted(self._project_cache.keys())
+
+    def create_bead(
+        self,
+        message_file: Path,
+        project_name: str,
+    ) -> Optional[str]:
+        """Create a bead issue in a project from a message file.
+
+        Parses the message file to extract metadata and creates a bead issue
+        with preserved metadata (slack_user_id, slack_timestamp, original_message).
+
+        Args:
+            message_file: Path to message file (markdown with frontmatter).
+            project_name: Target project name.
+
+        Returns:
+            Bead issue ID if successful, None otherwise.
+        """
+        if not message_file.exists():
+            logger.error(f"Message file not found: {message_file}")
+            return None
+
+        project_path = self._project_cache.get(project_name)
+        if not project_path:
+            logger.error(f"Project not found: {project_name}")
+            return None
+
+        if not (project_path / ".beads").exists():
+            logger.debug(f"Project {project_name} has no .beads directory")
+            return None
+
+        try:
+            # Parse the message file
+            metadata, content, title = self._parse_message_file(message_file)
+
+            # Extract bead creation parameters
+            description = content.strip()
+            priority = self._extract_priority(metadata, description)
+            issue_type = self._extract_type(metadata, description)
+            slack_user_id = metadata.get("slack_user_id", "")
+            slack_timestamp = metadata.get("timestamp", "")
+            original_message = metadata.get("original_message", "")
+
+            # Build description with metadata
+            full_description = self._build_bead_description(
+                description=description,
+                slack_user_id=slack_user_id,
+                slack_timestamp=slack_timestamp,
+                original_message=original_message,
+            )
+
+            # Create the bead
+            return self._create_bead_issue(
+                project_path=project_path,
+                title=title,
+                description=full_description,
+                priority=priority,
+                issue_type=issue_type,
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to create bead in {project_name}: {e}", exc_info=True)
+            return None
+
+    def _parse_message_file(self, message_file: Path) -> Tuple[Dict[str, str], str, str]:
+        """Parse a message file with YAML frontmatter.
+
+        Args:
+            message_file: Path to message file.
+
+        Returns:
+            Tuple of (metadata_dict, content, title).
+        """
+        content = message_file.read_text()
+
+        # Extract YAML frontmatter
+        metadata = {}
+        lines = content.split("\n")
+
+        if lines and lines[0].strip() == "---":
+            end_idx = None
+            for i in range(1, len(lines)):
+                if lines[i].strip() == "---":
+                    end_idx = i
+                    break
+
+            if end_idx:
+                # Parse YAML frontmatter
+                for line in lines[1:end_idx]:
+                    if ": " in line:
+                        key, val = line.split(": ", 1)
+                        metadata[key.strip()] = val.strip().strip("'\"")
+
+                # Content is after the closing ---
+                content_lines = lines[end_idx + 1 :]
+                content = "\n".join(content_lines).strip()
+
+        # Extract title from first line of content
+        title_lines = [l.strip() for l in content.split("\n") if l.strip()]
+        if title_lines:
+            title = title_lines[0]
+            # Remove markdown headers
+            title = re.sub(r"^#+\s*", "", title)
+        else:
+            title = f"Message from {metadata.get('user', 'unknown')}"
+
+        return metadata, content, title
+
+    def _extract_priority(self, metadata: Dict[str, str], content: str) -> str:
+        """Extract priority from metadata or content.
+
+        Looks for:
+        - Priority field in metadata
+        - P0-P4 or priority: N pattern in content
+        - Default to P3
+
+        Args:
+            metadata: Parsed metadata dict.
+            content: Message content.
+
+        Returns:
+            Priority string (P0-P4).
+        """
+        # Check metadata first
+        if "priority" in metadata:
+            priority = metadata["priority"].upper()
+            if priority in ["P0", "P1", "P2", "P3", "P4"]:
+                return priority
+
+        # Look for priority pattern in content
+        match = re.search(r"\b(P[0-4])\b", content)
+        if match:
+            return match.group(1)
+
+        # Default
+        return "P3"
+
+    def _extract_type(self, metadata: Dict[str, str], content: str) -> str:
+        """Extract issue type from metadata or content.
+
+        Looks for:
+        - Type field in metadata
+        - Keywords like "feature", "bug", "task" in content
+        - Default to "task"
+
+        Args:
+            metadata: Parsed metadata dict.
+            content: Message content.
+
+        Returns:
+            Issue type (task, feature, bug).
+        """
+        # Check metadata
+        if "type" in metadata:
+            issue_type = metadata["type"].lower()
+            if issue_type in ["task", "feature", "bug"]:
+                return issue_type
+
+        # Look for keywords in content
+        content_lower = content.lower()
+        if re.search(r"\b(feature|enhancement)\b", content_lower):
+            return "feature"
+        if re.search(r"\b(bug|fix)\b", content_lower):
+            return "bug"
+
+        return "task"
+
+    def _build_bead_description(
+        self,
+        description: str,
+        slack_user_id: str,
+        slack_timestamp: str,
+        original_message: str,
+    ) -> str:
+        """Build the full bead description with metadata.
+
+        Args:
+            description: Message content/description.
+            slack_user_id: Slack user ID of sender.
+            slack_timestamp: Slack message timestamp.
+            original_message: Original Slack message text.
+
+        Returns:
+            Full description with metadata appended.
+        """
+        lines = [description.strip()]
+
+        # Add metadata footer
+        lines.append("")
+        lines.append("---")
+        lines.append("**Metadata:**")
+
+        if slack_user_id:
+            lines.append(f"- Slack User: `{slack_user_id}`")
+        if slack_timestamp:
+            lines.append(f"- Timestamp: {slack_timestamp}")
+        if original_message:
+            # Escape and truncate if very long
+            msg = original_message.strip("'\"")
+            if len(msg) > 200:
+                msg = msg[:200] + "..."
+            lines.append(f"- Original Message: `{msg}`")
+
+        return "\n".join(lines)
+
+    def _create_bead_issue(
+        self,
+        project_path: Path,
+        title: str,
+        description: str,
+        priority: str,
+        issue_type: str,
+    ) -> Optional[str]:
+        """Create a bead issue using the beads CLI.
+
+        Args:
+            project_path: Path to project with .beads.
+            title: Issue title.
+            description: Issue description.
+            priority: Priority level (P0-P4).
+            issue_type: Issue type (task, feature, bug).
+
+        Returns:
+            Bead issue ID if successful, None otherwise.
+        """
+        try:
+            cmd = [
+                "bd",
+                "create",
+                f"--title={title}",
+                f"--description={description}",
+                f"--type={issue_type}",
+                f"--priority={priority}",
+            ]
+
+            logger.debug(f"Creating bead in {project_path.name}: {' '.join(cmd[:2])}...")
+
+            result = subprocess.run(
+                cmd,
+                cwd=str(project_path),
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            if result.returncode == 0:
+                # Extract bead ID from output
+                output = result.stdout + result.stderr
+                for line in output.split("\n"):
+                    # Look for "✓ Created issue: XXXXX" or similar
+                    if "Created issue" in line or "✓" in line:
+                        parts = line.split()
+                        for part in parts:
+                            if "-" in part and (
+                                part.startswith("hentown-")
+                                or part.startswith("pigeon-")
+                                or any(part.startswith(p + "-") for p in self._project_cache.keys())
+                            ):
+                                logger.info(f"Created bead: {part}")
+                                return part
+
+                logger.info(f"Bead created in {project_path.name} (exact ID unknown)")
+                return "created"
+
+            else:
+                logger.error(f"Failed to create bead: {result.stderr}")
+                return None
+
+        except subprocess.TimeoutExpired:
+            logger.error("Bead creation timed out")
+            return None
+        except FileNotFoundError:
+            logger.error("Beads CLI not found")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to create bead: {e}", exc_info=True)
+            return None
