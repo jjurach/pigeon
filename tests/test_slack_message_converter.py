@@ -3,6 +3,7 @@
 import re
 import pytest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from pigeon.slack_message_converter import SlackMessageConverter, _convert_mrkdwn
 
@@ -243,3 +244,206 @@ class TestHandleMessage:
         }
         converter.handle_message(parsed, "raw")
         assert not any(tmp_path.iterdir())
+
+
+# ---------------------------------------------------------------------------
+# SlackMessageConverter attachment handling
+# ---------------------------------------------------------------------------
+
+
+class TestAttachmentHandling:
+    @pytest.fixture
+    def mock_web_client(self):
+        client = Mock()
+        client.token = "xoxb-test-token"
+        return client
+
+    @pytest.fixture
+    def converter_with_attachments(self, tmp_path, mock_web_client):
+        attachments_dir = tmp_path / "attachments"
+        return SlackMessageConverter(
+            inbox_dir=tmp_path,
+            user_id_map={"U_ALICE": "Alice"},
+            web_client=mock_web_client,
+            attachments_dir=attachments_dir,
+        )
+
+    def test_is_audio_file_by_mimetype(self, converter_with_attachments):
+        assert converter_with_attachments._is_audio_file("audio/mp3", "test.mp3")
+        assert converter_with_attachments._is_audio_file("audio/wav", "test.wav")
+        assert converter_with_attachments._is_audio_file("audio/ogg", "test.ogg")
+
+    def test_is_audio_file_by_extension(self, converter_with_attachments):
+        assert converter_with_attachments._is_audio_file("application/octet-stream", "test.m4a")
+        assert converter_with_attachments._is_audio_file("application/octet-stream", "test.mp3")
+
+    def test_is_image_file_by_mimetype(self, converter_with_attachments):
+        assert converter_with_attachments._is_image_file("image/png", "test.png")
+        assert converter_with_attachments._is_image_file("image/jpeg", "test.jpg")
+        assert converter_with_attachments._is_image_file("image/gif", "test.gif")
+
+    def test_is_image_file_by_extension(self, converter_with_attachments):
+        assert converter_with_attachments._is_image_file("application/octet-stream", "test.png")
+        assert converter_with_attachments._is_image_file("application/octet-stream", "screenshot.jpg")
+
+    @patch("pigeon.slack_message_converter.requests.get")
+    def test_download_file_success(self, mock_get, converter_with_attachments, tmp_path):
+        # Mock successful download
+        mock_response = Mock()
+        mock_response.content = b"image data"
+        mock_get.return_value = mock_response
+
+        result = converter_with_attachments._download_file(
+            "https://files.slack.com/test.png",
+            "test.png",
+            "F_TEST123",
+        )
+
+        assert result is not None
+        assert result.exists()
+        assert result.read_bytes() == b"image data"
+
+    def test_process_attachments_no_files(self, converter_with_attachments):
+        event = {"text": "hello", "user": "U1", "ts": "1.0"}
+        refs, transcripts = converter_with_attachments._process_attachments(event)
+        assert refs == []
+        assert transcripts == ""
+
+    @patch("pigeon.slack_message_converter.requests.get")
+    def test_process_attachments_with_image(self, mock_get, converter_with_attachments):
+        mock_response = Mock()
+        mock_response.content = b"image data"
+        mock_get.return_value = mock_response
+
+        event = {
+            "text": "Check this image",
+            "user": "U1",
+            "ts": "1.0",
+            "files": [
+                {
+                    "id": "F123",
+                    "name": "screenshot.png",
+                    "mimetype": "image/png",
+                    "url_private_download": "https://files.slack.com/screenshot.png",
+                }
+            ],
+        }
+
+        refs, transcripts = converter_with_attachments._process_attachments(event)
+        assert len(refs) == 1
+        assert "screenshot.png" in refs[0]
+        assert transcripts == ""
+
+    @patch("pigeon.slack_message_converter.requests.get")
+    def test_process_attachments_with_audio(self, mock_get, converter_with_attachments):
+        mock_response = Mock()
+        mock_response.content = b"audio data"
+        mock_get.return_value = mock_response
+
+        event = {
+            "text": "Listen to this",
+            "user": "U1",
+            "ts": "1.0",
+            "files": [
+                {
+                    "id": "F456",
+                    "name": "recording.m4a",
+                    "mimetype": "audio/mp4",
+                    "url_private_download": "https://files.slack.com/recording.m4a",
+                }
+            ],
+        }
+
+        refs, transcripts = converter_with_attachments._process_attachments(event)
+        assert len(refs) == 0
+        assert "Transcript" in transcripts
+        assert "recording.m4a" in transcripts
+
+    def test_build_content_with_attachments(self):
+        content = SlackMessageConverter._build_content(
+            converted_text="Hello world",
+            original_text="Hello world",
+            user="Alice",
+            slack_user_id="U1",
+            channel="C1",
+            timestamp="2026-02-23T10:00:00",
+            thread_ts=None,
+            attachments=["![test.png](attachments/test.png)"],
+            transcripts="> **Transcript**: [Audio]",
+        )
+
+        assert "## Attachments" in content
+        assert "![test.png]" in content
+        assert "## Transcripts" in content
+        assert "> **Transcript**:" in content
+
+    def test_build_content_without_attachments(self):
+        content = SlackMessageConverter._build_content(
+            converted_text="Hello world",
+            original_text="Hello world",
+            user="Alice",
+            slack_user_id="U1",
+            channel="C1",
+            timestamp="2026-02-23T10:00:00",
+            thread_ts=None,
+            attachments=[],
+            transcripts="",
+        )
+
+        assert "## Attachments" not in content
+        assert "## Transcripts" not in content
+        assert "Hello world" in content
+
+    @patch("pigeon.slack_message_converter.requests.get")
+    def test_convert_with_attachments(self, mock_get, converter_with_attachments, tmp_path):
+        mock_response = Mock()
+        mock_response.content = b"test image"
+        mock_get.return_value = mock_response
+
+        event = {
+            "type": "message",
+            "user": "U_ALICE",
+            "text": "Here's an image",
+            "ts": "1000000000.0",
+            "channel": "C_TEST",
+            "files": [
+                {
+                    "id": "F_IMG",
+                    "name": "test.png",
+                    "mimetype": "image/png",
+                    "url_private_download": "https://files.slack.com/test.png",
+                }
+            ],
+        }
+
+        path = converter_with_attachments.convert(event)
+        assert path is not None
+        content = path.read_text()
+        assert "## Attachments" in content
+        assert "test.png" in content
+
+    def test_converter_without_web_client_skips_attachments(self, tmp_path):
+        converter = SlackMessageConverter(
+            inbox_dir=tmp_path,
+            web_client=None,  # No web client
+            attachments_dir=tmp_path / "attachments",
+        )
+
+        event = {
+            "type": "message",
+            "user": "U1",
+            "text": "Message with files",
+            "ts": "1.0",
+            "files": [
+                {
+                    "id": "F123",
+                    "name": "test.png",
+                    "mimetype": "image/png",
+                    "url_private_download": "https://files.slack.com/test.png",
+                }
+            ],
+        }
+
+        refs, transcripts = converter._process_attachments(event)
+        assert refs == []
+        assert transcripts == ""

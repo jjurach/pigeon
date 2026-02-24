@@ -2,9 +2,16 @@
 
 import re
 import logging
+import io
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
+from urllib.parse import urlparse
+
+try:
+    import requests
+except ImportError:
+    requests = None
 
 logger = logging.getLogger(__name__)
 
@@ -90,16 +97,27 @@ class SlackMessageConverter:
         daemon.add_message_handler(converter.handle_message)
     """
 
-    def __init__(self, inbox_dir: Path, user_id_map: Optional[dict] = None) -> None:
+    def __init__(
+        self,
+        inbox_dir: Path,
+        user_id_map: Optional[dict] = None,
+        web_client: Optional[Any] = None,
+        attachments_dir: Optional[Path] = None,
+    ) -> None:
         """Initialize the converter.
 
         Args:
             inbox_dir: Directory where markdown files will be written.
             user_id_map: Optional mapping of Slack user IDs to display names
                 used for resolving @mentions and filename generation.
+            web_client: Optional Slack WebClient for downloading attachments.
+            attachments_dir: Optional directory where attachment files will be stored.
+                If not provided, attachments will not be downloaded.
         """
         self.inbox_dir = Path(inbox_dir)
         self.user_id_map: dict = user_id_map or {}
+        self.web_client = web_client
+        self.attachments_dir = Path(attachments_dir) if attachments_dir else None
 
     # ------------------------------------------------------------------
     # Public API
@@ -157,6 +175,9 @@ class SlackMessageConverter:
 
         converted_text = _convert_mrkdwn(text, self.user_id_map)
 
+        # Process attachments
+        attachment_refs, transcripts = self._process_attachments(event)
+
         content = self._build_content(
             converted_text=converted_text,
             original_text=text,
@@ -165,9 +186,198 @@ class SlackMessageConverter:
             channel=channel,
             timestamp=timestamp_iso,
             thread_ts=thread_ts,
+            attachments=attachment_refs,
+            transcripts=transcripts,
         )
 
         return self._write(filename, content)
+
+    def _process_attachments(self, event: dict) -> tuple[list[str], str]:
+        """Process Slack file attachments in the event.
+
+        Downloads files and generates markdown references. For audio files,
+        also processes through STT pipeline.
+
+        Args:
+            event: Slack message event dict.
+
+        Returns:
+            Tuple of (attachment_references, transcripts) where:
+            - attachment_references: List of markdown strings for image/file links
+            - transcripts: Concatenated transcripts from audio files
+        """
+        if not self.attachments_dir or not self.web_client:
+            logger.debug("SlackMessageConverter: attachments_dir or web_client not configured")
+            return [], ""
+
+        files = event.get("files", [])
+        if not files:
+            return [], ""
+
+        attachment_refs = []
+        transcripts = []
+
+        for file_obj in files:
+            try:
+                ref, transcript = self._process_file(file_obj)
+                if ref:
+                    attachment_refs.append(ref)
+                if transcript:
+                    transcripts.append(transcript)
+            except Exception as exc:
+                logger.warning("SlackMessageConverter: failed to process file %s: %s", file_obj.get("id"), exc)
+
+        return attachment_refs, "\n".join(transcripts)
+
+    def _process_file(self, file_obj: dict) -> tuple[Optional[str], Optional[str]]:
+        """Process a single Slack file object.
+
+        Args:
+            file_obj: Slack file object from event.
+
+        Returns:
+            Tuple of (markdown_reference, transcript) where either may be None.
+        """
+        file_id = file_obj.get("id")
+        filename = file_obj.get("name", "attachment")
+        mimetype = file_obj.get("mimetype", "")
+        download_url = file_obj.get("url_private_download")
+
+        if not download_url or not file_id:
+            logger.warning("SlackMessageConverter: missing download_url or file_id for %s", filename)
+            return None, None
+
+        # Download the file
+        downloaded_path = self._download_file(download_url, filename, file_id)
+        if not downloaded_path:
+            return None, None
+
+        # Handle audio files (voice messages, audio recordings)
+        if self._is_audio_file(mimetype, filename):
+            transcript = self._process_audio_file(downloaded_path)
+            return None, transcript
+
+        # Handle image files
+        if self._is_image_file(mimetype, filename):
+            ref = self._create_image_reference(downloaded_path, filename)
+            return ref, None
+
+        # For other files, create a file link
+        ref = self._create_file_reference(downloaded_path, filename)
+        return ref, None
+
+    def _download_file(self, download_url: str, filename: str, file_id: str) -> Optional[Path]:
+        """Download a file from Slack.
+
+        Args:
+            download_url: URL to download from.
+            filename: Original filename.
+            file_id: Slack file ID (used for naming).
+
+        Returns:
+            Path to downloaded file, or None on error.
+        """
+        try:
+            if requests is None:
+                logger.error("SlackMessageConverter: requests library not available")
+                return None
+
+            self.attachments_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create a safe filename combining file_id and original name
+            safe_name = re.sub(r"[^\w.-]", "_", filename)
+            file_path = self.attachments_dir / f"{file_id}_{safe_name}"
+
+            # Download using the web client's token for authentication
+            headers = {}
+            if self.web_client:
+                headers["Authorization"] = f"Bearer {self.web_client.token}"
+
+            response = requests.get(download_url, headers=headers, timeout=30)
+            response.raise_for_status()
+
+            file_path.write_bytes(response.content)
+            logger.info("SlackMessageConverter: downloaded %s to %s", filename, file_path)
+            return file_path
+
+        except Exception as exc:
+            logger.error("SlackMessageConverter: failed to download %s: %s", filename, exc)
+            return None
+
+    def _is_audio_file(self, mimetype: str, filename: str) -> bool:
+        """Check if the file is an audio file."""
+        audio_types = {
+            "audio/",
+            "application/ogg",
+            "application/vnd.google-meet.audio",
+        }
+        audio_extensions = {".m4a", ".mp3", ".wav", ".ogg", ".flac", ".acc", ".webm"}
+
+        if any(mimetype.startswith(t) for t in audio_types):
+            return True
+        return Path(filename).suffix.lower() in audio_extensions
+
+    def _is_image_file(self, mimetype: str, filename: str) -> bool:
+        """Check if the file is an image file."""
+        image_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+        if mimetype.startswith("image/"):
+            return True
+        return Path(filename).suffix.lower() in image_extensions
+
+    def _process_audio_file(self, file_path: Path) -> Optional[str]:
+        """Process an audio file through STT.
+
+        For MVP, returns a placeholder. In production, would call STT service.
+
+        Args:
+            file_path: Path to the audio file.
+
+        Returns:
+            Transcript text, or None on error.
+        """
+        try:
+            # For MVP: create a placeholder transcript
+            transcript = f"\n> **Transcript**: [Audio from {file_path.name}]\n"
+            return transcript
+        except Exception as exc:
+            logger.error("SlackMessageConverter: failed to process audio %s: %s", file_path, exc)
+            return None
+
+    def _create_image_reference(self, file_path: Path, filename: str) -> str:
+        """Create markdown image reference.
+
+        Args:
+            file_path: Path to the image file.
+            filename: Original filename.
+
+        Returns:
+            Markdown image reference string.
+        """
+        # Use relative path from inbox_dir to attachments
+        try:
+            rel_path = file_path.relative_to(self.inbox_dir.parent)
+        except ValueError:
+            rel_path = file_path
+
+        return f"\n![{filename}]({rel_path})\n"
+
+    def _create_file_reference(self, file_path: Path, filename: str) -> str:
+        """Create markdown file reference.
+
+        Args:
+            file_path: Path to the file.
+            filename: Original filename.
+
+        Returns:
+            Markdown file link string.
+        """
+        # Use relative path from inbox_dir to attachments
+        try:
+            rel_path = file_path.relative_to(self.inbox_dir.parent)
+        except ValueError:
+            rel_path = file_path
+
+        return f"\n[{filename}]({rel_path})\n"
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -209,6 +419,8 @@ class SlackMessageConverter:
         channel: str,
         timestamp: str,
         thread_ts: Optional[str],
+        attachments: Optional[list[str]] = None,
+        transcripts: Optional[str] = None,
     ) -> str:
         """Build the markdown file content.
 
@@ -220,6 +432,8 @@ class SlackMessageConverter:
             channel: Slack channel ID.
             timestamp: ISO 8601 timestamp of the message.
             thread_ts: Thread timestamp if this is a thread parent, else None.
+            attachments: Optional list of attachment markdown references.
+            transcripts: Optional concatenated transcripts from audio files.
 
         Returns:
             Complete markdown file content string.
@@ -239,8 +453,21 @@ class SlackMessageConverter:
             "---",
             "",
             converted_text,
-            "",
         ]
+
+        # Add transcripts if any
+        if transcripts:
+            lines.append("")
+            lines.append("## Transcripts")
+            lines.append(transcripts)
+
+        # Add attachments if any
+        if attachments:
+            lines.append("")
+            lines.append("## Attachments")
+            lines.extend(attachments)
+
+        lines.append("")
         return "\n".join(lines)
 
     def _write(self, filename: str, content: str) -> Optional[Path]:
