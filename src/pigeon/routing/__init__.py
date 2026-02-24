@@ -8,10 +8,12 @@ from .router import ProjectRouter
 from .bead_creator import BeadCreator
 from .submodules import SubmoduleDiscoverer
 from .message_router import MessageRouter
+from .inbox_router import InboxRouterDaemon
 
 __all__ = [
     "ProjectRouter",
     "BeadCreator",
     "SubmoduleDiscoverer",
     "MessageRouter",
+    "InboxRouterDaemon",
 ]
