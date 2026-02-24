@@ -1,6 +1,7 @@
 """Tests for SlackMessageConverter and mrkdwn conversion."""
 
 import re
+import subprocess
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -334,11 +335,19 @@ class TestAttachmentHandling:
         assert "screenshot.png" in refs[0]
         assert transcripts == ""
 
+    @patch("pigeon.slack_message_converter.subprocess.run")
     @patch("pigeon.slack_message_converter.requests.get")
-    def test_process_attachments_with_audio(self, mock_get, converter_with_attachments):
+    def test_process_attachments_with_audio(self, mock_get, mock_run, converter_with_attachments):
         mock_response = Mock()
         mock_response.content = b"audio data"
         mock_get.return_value = mock_response
+
+        # Mock second_voice subprocess
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = "Speaker 1: Hello, this is a test recording."
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
 
         event = {
             "text": "Listen to this",
@@ -447,3 +456,197 @@ class TestAttachmentHandling:
         refs, transcripts = converter._process_attachments(event)
         assert refs == []
         assert transcripts == ""
+
+
+class TestSTTPipelineIntegration:
+    """Test STT pipeline integration for audio processing."""
+
+    @pytest.fixture
+    def converter_with_attachments(self, tmp_path):
+        """Create converter with attachment support."""
+        inbox_dir = tmp_path / "inbox"
+        attachments_dir = tmp_path / "attachments"
+        web_client = Mock()
+        web_client.token = "xoxb-test-token"
+        return SlackMessageConverter(
+            inbox_dir=inbox_dir,
+            attachments_dir=attachments_dir,
+            web_client=web_client,
+        )
+
+    @patch("pigeon.slack_message_converter.subprocess.run")
+    def test_stt_successful_processing(self, mock_run, converter_with_attachments, tmp_path):
+        """Test successful STT pipeline processing."""
+        # Create a test audio file
+        audio_file = tmp_path / "test.m4a"
+        audio_file.write_bytes(b"fake audio data")
+
+        # Mock second_voice subprocess
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = "Speaker 1: This is the transcribed text"
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        transcript = converter_with_attachments._process_audio_file(audio_file)
+
+        assert transcript is not None
+        assert "Transcript" in transcript
+        assert "test.m4a" in transcript
+        assert "This is the transcribed text" in transcript
+        mock_run.assert_called_once()
+
+    @patch("pigeon.slack_message_converter.subprocess.run")
+    def test_stt_with_multiline_output(self, mock_run, converter_with_attachments, tmp_path):
+        """Test STT with multiline speaker output."""
+        audio_file = tmp_path / "test.m4a"
+        audio_file.write_bytes(b"fake audio data")
+
+        # Mock multiline STT output
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = "Speaker 1: First line\nSpeaker 2: Second line\nSpeaker 1: Third line"
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        transcript = converter_with_attachments._process_audio_file(audio_file)
+
+        assert transcript is not None
+        assert "Transcript" in transcript
+        assert "First line" in transcript
+        assert "Second line" in transcript
+
+    @patch("pigeon.slack_message_converter.subprocess.run")
+    def test_stt_timeout_handling(self, mock_run, converter_with_attachments, tmp_path):
+        """Test handling of STT timeout."""
+        audio_file = tmp_path / "test.m4a"
+        audio_file.write_bytes(b"fake audio data")
+
+        # Mock timeout
+        mock_run.side_effect = subprocess.TimeoutExpired("sv", 300)
+
+        transcript = converter_with_attachments._process_audio_file(audio_file)
+
+        assert transcript is None
+
+    @patch("pigeon.slack_message_converter.subprocess.run")
+    def test_stt_command_not_found(self, mock_run, converter_with_attachments, tmp_path):
+        """Test handling when second_voice command is not available."""
+        audio_file = tmp_path / "test.m4a"
+        audio_file.write_bytes(b"fake audio data")
+
+        # Mock command not found
+        mock_run.side_effect = FileNotFoundError("sv command not found")
+
+        transcript = converter_with_attachments._process_audio_file(audio_file)
+
+        assert transcript is None
+
+    @patch("pigeon.slack_message_converter.subprocess.run")
+    def test_stt_empty_output(self, mock_run, converter_with_attachments, tmp_path):
+        """Test handling when STT returns empty output."""
+        audio_file = tmp_path / "test.m4a"
+        audio_file.write_bytes(b"fake audio data")
+
+        # Mock empty output
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        transcript = converter_with_attachments._process_audio_file(audio_file)
+
+        assert transcript is None
+
+    @patch("pigeon.slack_message_converter.subprocess.run")
+    def test_stt_error_return_code(self, mock_run, converter_with_attachments, tmp_path):
+        """Test handling when STT returns error code."""
+        audio_file = tmp_path / "test.m4a"
+        audio_file.write_bytes(b"fake audio data")
+
+        # Mock STT error
+        mock_result = Mock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        mock_result.stderr = "Error: Unable to process audio file"
+        mock_run.return_value = mock_result
+
+        transcript = converter_with_attachments._process_audio_file(audio_file)
+
+        assert transcript is None
+
+    def test_stt_missing_audio_file(self, converter_with_attachments, tmp_path):
+        """Test handling when audio file doesn't exist."""
+        audio_file = tmp_path / "nonexistent.m4a"
+
+        transcript = converter_with_attachments._process_audio_file(audio_file)
+
+        assert transcript is None
+
+    @patch("pigeon.slack_message_converter.subprocess.run")
+    def test_stt_integration_with_message_processing(self, mock_run, converter_with_attachments):
+        """Test STT integration in full message processing."""
+        # Mock second_voice subprocess
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = "Speaker: This is the transcription"
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        # Mock file download
+        with patch("pigeon.slack_message_converter.requests.get") as mock_get:
+            mock_response = Mock()
+            mock_response.content = b"audio data"
+            mock_get.return_value = mock_response
+
+            event = {
+                "text": "Check this audio",
+                "user": "U1",
+                "ts": "1.0",
+                "files": [
+                    {
+                        "id": "F123",
+                        "name": "voice.m4a",
+                        "mimetype": "audio/mp4",
+                        "url_private_download": "https://files.slack.com/voice.m4a",
+                    }
+                ],
+            }
+
+            refs, transcripts = converter_with_attachments._process_attachments(event)
+
+            assert len(refs) == 0
+            assert "Transcript" in transcripts
+            assert "This is the transcription" in transcripts
+
+    @patch("pigeon.slack_message_converter.subprocess.run")
+    def test_stt_continues_on_error(self, mock_run, converter_with_attachments):
+        """Test that message processing continues even if STT fails."""
+        # Mock STT failure
+        mock_run.side_effect = Exception("STT error")
+
+        with patch("pigeon.slack_message_converter.requests.get") as mock_get:
+            mock_response = Mock()
+            mock_response.content = b"audio data"
+            mock_get.return_value = mock_response
+
+            event = {
+                "text": "Check this audio",
+                "user": "U1",
+                "ts": "1.0",
+                "files": [
+                    {
+                        "id": "F123",
+                        "name": "voice.m4a",
+                        "mimetype": "audio/mp4",
+                        "url_private_download": "https://files.slack.com/voice.m4a",
+                    }
+                ],
+            }
+
+            # Should not raise, processing continues
+            refs, transcripts = converter_with_attachments._process_attachments(event)
+
+            assert len(refs) == 0
+            assert transcripts == ""

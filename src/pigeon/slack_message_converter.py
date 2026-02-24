@@ -3,6 +3,7 @@
 import re
 import logging
 import io
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Any
@@ -325,22 +326,81 @@ class SlackMessageConverter:
         return Path(filename).suffix.lower() in image_extensions
 
     def _process_audio_file(self, file_path: Path) -> Optional[str]:
-        """Process an audio file through STT.
+        """Process an audio file through the second_voice STT pipeline.
 
-        For MVP, returns a placeholder. In production, would call STT service.
+        Calls the second_voice subprocess to transcribe the audio file and
+        extract speaker information. Handles errors gracefully by returning
+        a partial transcript if STT fails.
 
         Args:
             file_path: Path to the audio file.
 
         Returns:
-            Transcript text, or None on error.
+            Formatted transcript text with speaker info, or None on critical error.
         """
         try:
-            # For MVP: create a placeholder transcript
-            transcript = f"\n> **Transcript**: [Audio from {file_path.name}]\n"
-            return transcript
+            if not file_path.exists():
+                logger.warning("SlackMessageConverter: audio file not found: %s", file_path)
+                return None
+
+            # Call second_voice STT pipeline
+            try:
+                logger.debug("SlackMessageConverter: processing audio with second_voice: %s", file_path)
+                result = subprocess.run(
+                    ["sv", "stt", str(file_path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,  # 5 minutes timeout for STT
+                )
+
+                if result.returncode == 0:
+                    # Parse the STT output
+                    transcript_text = result.stdout.strip()
+                    if transcript_text:
+                        # Format transcript with file reference
+                        formatted = f"\n> **Transcript** ({file_path.name}):\n"
+                        formatted += f"> {transcript_text.replace(chr(10), chr(10) + '> ')}\n"
+                        logger.info(
+                            "SlackMessageConverter: successfully transcribed audio %s",
+                            file_path.name,
+                        )
+                        return formatted
+                    else:
+                        logger.warning(
+                            "SlackMessageConverter: second_voice returned empty output for %s",
+                            file_path.name,
+                        )
+                        return None
+
+                else:
+                    # STT failed, log the error
+                    error_msg = result.stderr.strip() or result.stdout.strip()
+                    logger.warning(
+                        "SlackMessageConverter: second_voice STT failed for %s: %s",
+                        file_path.name,
+                        error_msg,
+                    )
+                    # Continue without transcript rather than failing
+                    return None
+
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    "SlackMessageConverter: second_voice STT timed out for %s",
+                    file_path.name,
+                )
+                return None
+
+            except FileNotFoundError:
+                logger.warning("SlackMessageConverter: second_voice (sv) command not found - is it installed?")
+                return None
+
         except Exception as exc:
-            logger.error("SlackMessageConverter: failed to process audio %s: %s", file_path, exc)
+            logger.error(
+                "SlackMessageConverter: unexpected error processing audio %s: %s",
+                file_path,
+                exc,
+                exc_info=True,
+            )
             return None
 
     def _create_image_reference(self, file_path: Path, filename: str) -> str:
