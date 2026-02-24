@@ -204,6 +204,8 @@ cp .env.example .env
 | `PIGEON_POLL_INTERVAL` | `30` | Polling interval in seconds |
 | `PIGEON_INBOX_DIR` | `../../dev_notes/inbox` | Local directory for downloaded files |
 | `PIGEON_GOOGLE_PROFILE` | `default` | Google auth profile name |
+| `SLACK_BOT_TOKEN` | (required for Slack integration) | Slack app bot token (starts with `xoxb-`) |
+| `SLACK_APP_TOKEN` | (required for Slack integration) | Slack app-level token (starts with `xapp-`) |
 
 ### Google Drive Authentication
 
@@ -229,6 +231,70 @@ Pigeon reuses authentication from `google-personal-mcp`. Set up authentication o
    ```
 
 Pigeon will automatically reuse these credentials. Both applications can safely share the same profile.
+
+### Slack Bot Token Configuration
+
+Pigeon integrates with Slack for message routing and notifications. Set up a Slack app to obtain the required tokens:
+
+#### Step 1: Create a Slack App
+
+1. Go to [Slack API Apps](https://api.slack.com/apps) and click **Create New App**
+2. Choose **From scratch**
+3. Enter app name: `Pigeon` (or your preferred name)
+4. Select your workspace
+5. Click **Create App**
+
+#### Step 2: Configure Bot Token Scopes
+
+1. In your app settings, go to **OAuth & Permissions**
+2. Under **Scopes > Bot Token Scopes**, add these permissions:
+   - `chat:write` - Send messages
+   - `channels:history` - Read channel history
+   - `channels:read` - List channels
+   - `im:history` - Read direct messages
+   - `im:read` - List direct messages
+   - `users:read` - Get user information
+
+#### Step 3: Install App to Workspace
+
+1. Go to **OAuth & Permissions**
+2. Click **Install to Workspace** (or **Reinstall** if already installed)
+3. Authorize the requested permissions
+4. Copy the **Bot User OAuth Token** (starts with `xoxb-`)
+
+#### Step 4: Obtain App-Level Token
+
+1. Go to **Settings > Basic Information**
+2. Scroll to **App-Level Tokens**
+3. Click **Generate Token and Scopes**
+4. Name it: `socketmode` (or similar)
+5. Add scope: `connections:write`
+6. Click **Generate**
+7. Copy the **App-Level Token** (starts with `xapp-`)
+
+#### Step 5: Enable Socket Mode
+
+1. Go to **Settings > Socket Mode**
+2. Toggle **Socket Mode** to **Enabled**
+3. This enables real-time message handling
+
+#### Step 6: Add Environment Variables
+
+Add the tokens to your `.env` file:
+
+```bash
+# Slack integration
+SLACK_BOT_TOKEN=xoxb-your-bot-token-here
+SLACK_APP_TOKEN=xapp-your-app-token-here
+```
+
+**Security Note:** Never commit `.env` to version control. Use `.env.example` for team reference:
+
+```bash
+# .env.example
+SLACK_BOT_TOKEN=xoxb-your-bot-token-here
+SLACK_APP_TOKEN=xapp-your-app-token-here
+```
 
 ### Custom Profiles
 
@@ -486,6 +552,54 @@ Pigeon will automatically re-authenticate. If repeated:
 1. Check process manually: `ps aux | grep pigeon`
 2. Force kill: `./scripts/run-poller.sh stop && sleep 2 && ./scripts/run-poller.sh stop`
 3. View logs for shutdown errors: `tail -n 50 tmp/pigeon-poller.log`
+
+### Slack Integration Issues
+
+**Error:** `SLACK_BOT_TOKEN not found` or `SLACK_APP_TOKEN not found`
+
+**Solution:**
+1. Ensure both tokens are set in `.env`:
+   ```bash
+   echo $SLACK_BOT_TOKEN
+   echo $SLACK_APP_TOKEN
+   ```
+
+2. If missing, obtain them from Slack API dashboard:
+   - Bot token: OAuth & Permissions > Bot User OAuth Token
+   - App token: Settings > Basic Information > App-Level Tokens
+
+3. Reload environment:
+   ```bash
+   source .env
+   pigeon start --verbose
+   ```
+
+**Error:** `Invalid token` or `not_authed`
+
+**Solution:**
+1. Verify tokens are correct (copy from Slack API dashboard again)
+2. Check that tokens belong to the same app
+3. Ensure app is installed to workspace
+4. Verify Socket Mode is enabled in app settings
+
+**Error:** `Socket Mode connection failed`
+
+**Solution:**
+1. Verify Socket Mode is enabled in app settings
+2. Check firewall/network allows WebSocket connections to `wss://wss-primary.slack.com`
+3. Restart pigeon after enabling Socket Mode:
+   ```bash
+   pigeon stop
+   pigeon start --verbose
+   ```
+
+**Error:** `Permission denied` when connecting to Slack
+
+**Solution:**
+1. Verify bot has required OAuth scopes in app settings:
+   - `chat:write`, `channels:read`, `im:read`, `users:read`
+2. Reinstall app to workspace to apply new scopes
+3. Check bot is added to the channels it needs to access
 
 ## Development
 
