@@ -14,7 +14,18 @@ This document captures the design rationale and external interface for pigeon. I
 
 **Project detection via beads.** The routing step determines which project a message belongs to by examining the beads databases of candidate modules. This avoids hardcoding routing rules and allows the routing logic to be aware of current project state.
 
-**Slack Socket Mode (same as hatchery).** Socket Mode was chosen for the same reason as in hatchery — no public endpoint required. The RESEARCH phase (pigeon-gjf) is clarifying the exact Slack app configuration and whether pigeon shares a Slack app with hatchery or uses a separate one.
+**Slack Socket Mode & Separate App (pigeon-gjf resolved).** Socket Mode was chosen for the same reason as in hatchery — no public endpoint required. Pigeon uses a **dedicated Slack app** (separate from hatchery) with its own bot and app tokens. This enables independent deployment, testing, and credential isolation. Trade-off: two Slack apps to manage in the workspace, but clear separation of concerns.
+
+**Separate Listener Daemon (pigeon-gjf resolved).** Pigeon Slack listener runs as a **dedicated daemon** (`pigeon-slack-listener`) independent from the hatchery daemon. This separates concerns: hatchery executes work, pigeon routes work. Trade-off: operational overhead of managing separate daemon process, but clean architecture with no cross-module dependencies at runtime.
+
+**Project-Specific Environment Variables (pigeon-gjf resolved).** Slack credentials use `PIGEON_SLACK_*` prefixes (e.g., `PIGEON_SLACK_BOT_TOKEN`, `PIGEON_SLACK_APP_TOKEN`, `PIGEON_SLACK_INBOX_CHANNEL`, `PIGEON_SLACK_AUTHORIZED_USERS`) instead of sharing hatchery's variables. This provides clear ownership and allows each module to evolve independently. Trade-off: more `.env` variables to manage, but matches hatchery's pattern.
+
+**Socket Mode Only (pigeon-gjf resolved).** Pigeon uses SocketModeClient for real-time message processing (not Events API webhooks). This matches hatchery's approach and aligns with Slack recommendations. Acceptable latency for routing messages to beads. Trade-off: network-dependent, requires robust reconnection logic.
+
+**Phased Code Sharing (pigeon-gjf resolved).** Code sharing with hatchery and mellona will be phased:
+  1. **Phase 1 (Current):** Pigeon implements separate `SlackSource` and listener daemon (learn patterns first)
+  2. **Phase 2 (Future):** After pigeon and mellona are both implemented, extract shared `hentown-slack-core` library
+  3. Trade-off: temporary duplication, but avoids premature abstraction. Allows each module to solve its own problems first.
 
 **STT pipeline dependency.** Voice messages from Slack require transcription before routing. pigeon calls the STT pipeline (currently second_voice) to convert audio to text. This is an optional processing step — text messages bypass STT.
 
@@ -24,8 +35,8 @@ This document captures the design rationale and external interface for pigeon. I
 
 | Phase | Description | Status |
 |---|---|---|
-| RESEARCH | Clarify Slack Integration Questions | open (in_progress: partial research complete) |
-| Slack Listener | Slack #hentown-inbox listener | open (blocked by RESEARCH) |
+| RESEARCH | Clarify Slack Integration Questions | ✓ closed (5 questions answered, architecture decisions made) |
+| Slack Listener | Slack #hentown-inbox listener daemon | open (ready to implement) |
 | Router | Route inbox items to pipeline | open (blocked by Slack Listener) |
 
 ---
@@ -36,7 +47,7 @@ This document captures the design rationale and external interface for pigeon. I
 
 **Beads databases in target modules** — pigeon creates bead issues in target projects. Target modules must have `.beads/` initialized.
 
-**Slack app credentials** — Socket Mode bot token and app-level token. Stored via environment variables or mellona keyring. The RESEARCH phase is clarifying whether pigeon uses a dedicated Slack app or shares one with hatchery.
+**Slack app credentials** — Pigeon uses a dedicated Slack app (separate from hatchery) with its own Socket Mode bot token (`PIGEON_SLACK_BOT_TOKEN`) and app-level token (`PIGEON_SLACK_APP_TOKEN`). Stored via environment variables or mellona keyring. This isolation enables independent deployment and testing.
 
 ---
 
