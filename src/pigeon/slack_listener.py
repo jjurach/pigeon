@@ -211,6 +211,11 @@ class SlackListenerDaemon:
             logger.debug("SlackListenerDaemon: non-JSON message received, skipping")
             return
 
+        # Skip non-dict payloads (e.g., null, strings, numbers)
+        if not isinstance(parsed, dict):
+            logger.debug("SlackListenerDaemon: non-dict message received, skipping")
+            return
+
         if not self._is_authorized_message(parsed):
             return
 
