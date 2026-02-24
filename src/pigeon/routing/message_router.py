@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import subprocess
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple
 
@@ -302,19 +303,153 @@ class MessageRouter:
             logger.error(f"Failed to archive message {message_file}: {e}", exc_info=True)
             return None
 
+    def archive_processed_file(
+        self,
+        message_file: Path,
+        archive_dir: Optional[Path] = None,
+    ) -> Optional[Path]:
+        """Archive a successfully processed message file.
+
+        Moves the file to the archive directory with a date-based organization.
+
+        Args:
+            message_file: Path to processed message file.
+            archive_dir: Optional archive directory. If not provided, uses
+                         hentown inbox-archive.
+
+        Returns:
+            Path to archived file, or None on error.
+        """
+        if not message_file.exists():
+            logger.debug(f"Cannot archive processed file: not found: {message_file}")
+            return None
+
+        try:
+            # Determine archive directory
+            if archive_dir is None:
+                archive_dir = self.hentown_root / "dev_notes" / "inbox-archive"
+
+            archive_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create date-based subdirectory (YYYY-MM-DD)
+            today = datetime.now().strftime("%Y-%m-%d")
+            dated_archive_dir = archive_dir / today
+            dated_archive_dir.mkdir(parents=True, exist_ok=True)
+
+            # Archive the file with original name
+            archive_path = dated_archive_dir / message_file.name
+
+            # Handle duplicates by appending timestamp if needed
+            if archive_path.exists():
+                stem = message_file.stem
+                suffix = message_file.suffix
+                timestamp = datetime.now().strftime("%H%M%S%f")[:9]
+                archive_path = dated_archive_dir / f"{stem}_{timestamp}{suffix}"
+
+            # Move file to archive
+            archive_path.write_text(message_file.read_text())
+            logger.info(f"Archived processed file: {message_file.name} → {archive_path.relative_to(archive_dir)}")
+
+            # Delete original
+            try:
+                message_file.unlink()
+                logger.debug(f"Deleted processed message file: {message_file}")
+            except Exception as e:
+                logger.warning(f"Could not delete processed file {message_file}: {e}")
+
+            return archive_path
+
+        except Exception as e:
+            logger.error(
+                f"Failed to archive processed file {message_file}: {e}",
+                exc_info=True,
+            )
+            return None
+
+    def cleanup_old_archives(
+        self,
+        archive_dir: Optional[Path] = None,
+        retention_days: int = 30,
+    ) -> int:
+        """Clean up archive files older than retention period.
+
+        Removes files from inbox-archive/ that are older than the retention period.
+        This helps manage disk space for long-running daemons.
+
+        Args:
+            archive_dir: Optional archive directory. If not provided, uses hentown inbox-archive.
+            retention_days: Number of days to retain archived files (default 30).
+
+        Returns:
+            Number of files deleted.
+        """
+        if archive_dir is None:
+            archive_dir = self.hentown_root / "dev_notes" / "inbox-archive"
+
+        if not archive_dir.exists():
+            logger.debug(f"Archive directory does not exist: {archive_dir}")
+            return 0
+
+        deleted_count = 0
+        cutoff_date = datetime.now() - timedelta(days=retention_days)
+
+        try:
+            for date_dir in archive_dir.iterdir():
+                if not date_dir.is_dir():
+                    continue
+
+                # Try to parse directory name as date
+                try:
+                    dir_date = datetime.strptime(date_dir.name, "%Y-%m-%d")
+                except ValueError:
+                    # Skip directories that don't match date format
+                    logger.debug(f"Skipping archive directory with non-date name: {date_dir.name}")
+                    continue
+
+                # If directory is older than retention period, delete it
+                if dir_date < cutoff_date:
+                    try:
+                        # Delete all files in the directory first
+                        for file_path in date_dir.iterdir():
+                            if file_path.is_file():
+                                file_path.unlink()
+                                deleted_count += 1
+
+                        # Delete the directory
+                        date_dir.rmdir()
+                        logger.info(
+                            f"Cleaned up old archive directory: {date_dir.name} "
+                            f"({deleted_count} files deleted)"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to clean up archive directory {date_dir.name}: {e}")
+
+            logger.info(f"Archive cleanup completed: {deleted_count} files deleted")
+            return deleted_count
+
+        except Exception as e:
+            logger.error(f"Error during archive cleanup: {e}", exc_info=True)
+            return 0
+
     def route_and_create_beads(
         self,
         message_file: Path,
         archive_unparseable: bool = True,
+        archive_successful: bool = True,
     ) -> Dict[str, bool]:
         """Route a message to target projects and create beads.
 
         High-level workflow: detect projects, create beads in each project,
-        handle errors gracefully.
+        archive successful files, handle errors gracefully.
+
+        After successful routing to all projects, the message file is moved to
+        the archive directory. On failure, the file is either archived for manual
+        review (if archive_unparseable=True) or left in place for retry.
 
         Args:
             message_file: Path to message file.
             archive_unparseable: If True, archive messages that cannot be parsed.
+            archive_successful: If True, archive successfully processed files.
 
         Returns:
             Dict mapping project names to success/failure status.
@@ -357,9 +492,31 @@ class MessageRouter:
                     logger.error(f"Error creating bead in {project}: {e}", exc_info=True)
                     results[project] = False
 
-            # Archive if all failed
-            if not any(results.values()) and archive_unparseable:
-                self.archive_message(message_file, reason="bead-creation-failed")
+            # Determine if routing was successful
+            success_count = sum(1 for v in results.values() if v)
+            total_projects = len(projects)
+
+            if success_count == total_projects:
+                # All successful
+                logger.info(f"Successfully routed message to all {total_projects} project(s)")
+                if archive_successful:
+                    archive_path = self.archive_processed_file(message_file)
+                    if archive_path:
+                        logger.info(f"Archived processed message: {archive_path}")
+
+            elif success_count > 0:
+                # Partial success
+                logger.warning(
+                    f"Partial routing success: {success_count}/{total_projects} projects"
+                )
+                # Keep file in inbox for retry on partial failure
+                logger.info("Message file kept in inbox for retry")
+
+            else:
+                # All failed
+                logger.error(f"Failed to route message to any project")
+                if archive_unparseable:
+                    self.archive_message(message_file, reason="bead-creation-failed")
 
             return results
 
