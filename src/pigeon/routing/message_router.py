@@ -251,6 +251,127 @@ class MessageRouter:
         """
         return sorted(self._project_cache.keys())
 
+    def archive_message(
+        self,
+        message_file: Path,
+        archive_dir: Optional[Path] = None,
+        reason: str = "unparseable",
+    ) -> Optional[Path]:
+        """Archive a message file for manual review.
+
+        Args:
+            message_file: Path to message file to archive.
+            archive_dir: Optional archive directory. If not provided, creates
+                         a default archive directory relative to message_file.
+            reason: Reason for archiving (unparseable, no-project, etc).
+
+        Returns:
+            Path to archived file, or None on error.
+        """
+        if not message_file.exists():
+            logger.warning(f"Cannot archive: message file not found: {message_file}")
+            return None
+
+        try:
+            # Determine archive directory
+            if archive_dir is None:
+                # Use hentown inbox-archive by default
+                archive_dir = self.hentown_root / "dev_notes" / "inbox-archive"
+
+            archive_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create archived filename with reason prefix
+            original_name = message_file.name
+            archive_name = f"[{reason}]_{original_name}"
+            archive_path = archive_dir / archive_name
+
+            # Copy file to archive
+            archive_path.write_text(message_file.read_text())
+            logger.info(f"Archived message: {original_name} → {archive_path} (reason: {reason})")
+
+            # Delete original if archiving succeeded
+            try:
+                message_file.unlink()
+                logger.debug(f"Deleted original message file: {message_file}")
+            except Exception as e:
+                logger.warning(f"Could not delete original message file {message_file}: {e}")
+
+            return archive_path
+
+        except Exception as e:
+            logger.error(f"Failed to archive message {message_file}: {e}", exc_info=True)
+            return None
+
+    def route_and_create_beads(
+        self,
+        message_file: Path,
+        archive_unparseable: bool = True,
+    ) -> Dict[str, bool]:
+        """Route a message to target projects and create beads.
+
+        High-level workflow: detect projects, create beads in each project,
+        handle errors gracefully.
+
+        Args:
+            message_file: Path to message file.
+            archive_unparseable: If True, archive messages that cannot be parsed.
+
+        Returns:
+            Dict mapping project names to success/failure status.
+        """
+        results = {}
+
+        # Validate file exists
+        if not message_file.exists():
+            logger.error(f"Message file not found: {message_file}")
+            return results
+
+        logger.info(f"Processing message: {message_file.name}")
+
+        try:
+            # Detect target projects
+            projects = self.detect_projects(message_file)
+
+            if not projects:
+                logger.warning(f"No target projects detected for {message_file.name}")
+                if archive_unparseable:
+                    self.archive_message(message_file, reason="no-project-detected")
+                return results
+
+            logger.info(f"Detected {len(projects)} target project(s): {projects}")
+
+            # Create beads in each project
+            for project in projects:
+                try:
+                    logger.info(f"Creating bead in project: {project}")
+                    bead_id = self.create_bead(message_file, project)
+
+                    if bead_id:
+                        logger.info(f"Successfully created bead {bead_id} in {project}")
+                        results[project] = True
+                    else:
+                        logger.warning(f"Failed to create bead in {project}")
+                        results[project] = False
+
+                except Exception as e:
+                    logger.error(f"Error creating bead in {project}: {e}", exc_info=True)
+                    results[project] = False
+
+            # Archive if all failed
+            if not any(results.values()) and archive_unparseable:
+                self.archive_message(message_file, reason="bead-creation-failed")
+
+            return results
+
+        except Exception as e:
+            logger.error(
+                f"Error processing message {message_file.name}: {e}",
+                exc_info=True,
+            )
+            if archive_unparseable:
+                self.archive_message(message_file, reason="processing-error")
+            return results
+
     def create_bead(
         self,
         message_file: Path,
@@ -269,29 +390,50 @@ class MessageRouter:
             Bead issue ID if successful, None otherwise.
         """
         if not message_file.exists():
-            logger.error(f"Message file not found: {message_file}")
+            logger.error(f"Cannot create bead: message file not found: {message_file}")
             return None
 
         project_path = self._project_cache.get(project_name)
         if not project_path:
-            logger.error(f"Project not found: {project_name}")
+            logger.error(f"Cannot create bead: project not found: {project_name}")
             return None
 
         if not (project_path / ".beads").exists():
-            logger.debug(f"Project {project_name} has no .beads directory")
+            logger.debug(f"Cannot create bead: project {project_name} has no .beads directory")
             return None
 
         try:
+            logger.debug(f"Parsing message file: {message_file}")
+
             # Parse the message file
-            metadata, content, title = self._parse_message_file(message_file)
+            try:
+                metadata, content, title = self._parse_message_file(message_file)
+            except Exception as e:
+                logger.error(f"Failed to parse message file {message_file}: {e}")
+                raise
+
+            if not title or not title.strip():
+                logger.warning(f"Message file {message_file} has empty title")
+                title = f"Message from {metadata.get('user', 'unknown')}"
+
+            logger.debug(f"Extracted title: {title}")
 
             # Extract bead creation parameters
             description = content.strip()
+            if not description:
+                logger.warning(f"Message file {message_file} has empty description")
+                description = metadata.get("original_message", "No description provided")
+
             priority = self._extract_priority(metadata, description)
             issue_type = self._extract_type(metadata, description)
             slack_user_id = metadata.get("slack_user_id", "")
             slack_timestamp = metadata.get("timestamp", "")
             original_message = metadata.get("original_message", "")
+
+            logger.debug(
+                f"Extracted metadata: priority={priority}, type={issue_type}, "
+                f"user={slack_user_id}"
+            )
 
             # Build description with metadata
             full_description = self._build_bead_description(
@@ -302,7 +444,8 @@ class MessageRouter:
             )
 
             # Create the bead
-            return self._create_bead_issue(
+            logger.debug(f"Creating bead issue in {project_name}")
+            result = self._create_bead_issue(
                 project_path=project_path,
                 title=title,
                 description=full_description,
@@ -310,8 +453,18 @@ class MessageRouter:
                 issue_type=issue_type,
             )
 
+            if result:
+                logger.info(f"Successfully created bead in {project_name}: {result}")
+            else:
+                logger.error(f"Beads CLI returned no result for {project_name}")
+
+            return result
+
         except Exception as e:
-            logger.error(f"Failed to create bead in {project_name}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to create bead in {project_name} from {message_file.name}: {e}",
+                exc_info=True,
+            )
             return None
 
     def _parse_message_file(self, message_file: Path) -> Tuple[Dict[str, str], str, str]:
@@ -476,6 +629,19 @@ class MessageRouter:
             Bead issue ID if successful, None otherwise.
         """
         try:
+            # Validate inputs
+            if not title or not title.strip():
+                logger.error("Cannot create bead: title is empty")
+                return None
+
+            if not issue_type in ["task", "feature", "bug"]:
+                logger.warning(f"Invalid issue type: {issue_type}, defaulting to task")
+                issue_type = "task"
+
+            if not priority in ["P0", "P1", "P2", "P3", "P4"]:
+                logger.warning(f"Invalid priority: {priority}, defaulting to P3")
+                priority = "P3"
+
             cmd = [
                 "bd",
                 "create",
@@ -485,7 +651,7 @@ class MessageRouter:
                 f"--priority={priority}",
             ]
 
-            logger.debug(f"Creating bead in {project_path.name}: {' '.join(cmd[:2])}...")
+            logger.debug(f"Creating bead in {project_path.name}: bd create ...")
 
             result = subprocess.run(
                 cmd,
@@ -498,6 +664,8 @@ class MessageRouter:
             if result.returncode == 0:
                 # Extract bead ID from output
                 output = result.stdout + result.stderr
+                logger.debug(f"Beads CLI output: {output[:200]}")
+
                 for line in output.split("\n"):
                     # Look for "✓ Created issue: XXXXX" or similar
                     if "Created issue" in line or "✓" in line:
@@ -508,22 +676,23 @@ class MessageRouter:
                                 or part.startswith("pigeon-")
                                 or any(part.startswith(p + "-") for p in self._project_cache.keys())
                             ):
-                                logger.info(f"Created bead: {part}")
+                                logger.info(f"Beads CLI: created issue {part}")
                                 return part
 
-                logger.info(f"Bead created in {project_path.name} (exact ID unknown)")
+                logger.info(f"Bead created in {project_path.name} (exact ID not found in output)")
                 return "created"
 
             else:
-                logger.error(f"Failed to create bead: {result.stderr}")
+                error_msg = result.stderr.strip() or result.stdout.strip()
+                logger.error(f"Beads CLI error (exit code {result.returncode}): {error_msg}")
                 return None
 
         except subprocess.TimeoutExpired:
-            logger.error("Bead creation timed out")
+            logger.error("Bead creation timed out (beads CLI did not respond within 10s)")
             return None
         except FileNotFoundError:
-            logger.error("Beads CLI not found")
+            logger.error("Beads CLI not found in PATH - is beads installed?")
             return None
         except Exception as e:
-            logger.error(f"Failed to create bead: {e}", exc_info=True)
+            logger.error(f"Unexpected error creating bead: {e}", exc_info=True)
             return None
