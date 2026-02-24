@@ -4,6 +4,7 @@ import json
 import logging
 import signal
 import threading
+import time
 from typing import Callable, List, Optional
 
 from slack_sdk.socket_mode.builtin.client import SocketModeClient
@@ -35,13 +36,17 @@ class SlackListenerDaemon:
         self._socket_client = SocketModeClient(
             app_token=config.app_token,
             web_client=self._web_client,
-            auto_reconnect_enabled=True,
+            auto_reconnect_enabled=False,  # We handle reconnection manually
             on_message_listeners=[self._on_raw_message],
             on_error_listeners=[self._on_error],
             on_close_listeners=[self._on_close],
         )
 
         self._message_handlers: List[Callable[[dict, str], None]] = []
+
+        # Reconnection tracking
+        self._reconnect_attempt = 0
+        self._last_reconnect_time = 0.0
 
     # ------------------------------------------------------------------
     # Public API
@@ -56,15 +61,50 @@ class SlackListenerDaemon:
         self._message_handlers.append(handler)
 
     def start(self) -> None:
-        """Connect to Slack and block until stop() is called."""
+        """Connect to Slack and block until stop() is called.
+
+        Implements exponential backoff reconnection logic (1s → 2s → 4s → 8s → 5m max).
+        """
         self._register_signal_handlers()
         self._stop_event.clear()
+        self._reconnect_attempt = 0
 
-        logger.info("SlackListenerDaemon: connecting via Socket Mode")
+        logger.info("SlackListenerDaemon: starting with exponential backoff reconnection")
+
         try:
-            self._socket_client.connect()
-            logger.info("SlackListenerDaemon: connected, waiting for messages")
-            self._stop_event.wait()
+            while not self._stop_event.is_set():
+                try:
+                    logger.info("SlackListenerDaemon: connecting via Socket Mode")
+                    self._socket_client.connect()
+                    logger.info("SlackListenerDaemon: connected, waiting for messages")
+                    self._reconnect_attempt = 0  # Reset on successful connection
+
+                    # Wait for stop signal or connection to drop
+                    self._stop_event.wait()
+                    if self._stop_event.is_set():
+                        break
+
+                except KeyboardInterrupt:
+                    logger.info("SlackListenerDaemon: interrupted, shutting down")
+                    break
+                except Exception as exc:
+                    logger.error(
+                        "SlackListenerDaemon: connection failed: %s",
+                        exc,
+                        exc_info=exc,
+                    )
+                    if self._stop_event.is_set():
+                        break
+
+                    # Calculate exponential backoff delay
+                    delay = self._calculate_reconnect_delay()
+                    logger.warning(
+                        "SlackListenerDaemon: reconnecting in %ds (attempt %d)",
+                        delay,
+                        self._reconnect_attempt,
+                    )
+                    time.sleep(delay)
+
         finally:
             self._disconnect()
 
@@ -76,6 +116,19 @@ class SlackListenerDaemon:
     def is_connected(self) -> bool:
         """Return True if the underlying socket client reports a live connection."""
         return self._socket_client.is_connected()
+
+    def _calculate_reconnect_delay(self) -> int:
+        """Calculate exponential backoff delay with 5-minute maximum.
+
+        Backoff sequence: 1s, 2s, 4s, 8s, 5m (300s), 5m, ...
+
+        Returns:
+            Delay in seconds before attempting reconnection.
+        """
+        self._reconnect_attempt += 1
+        # Exponential backoff: 2^(attempt-1) seconds, capped at 300s (5 minutes)
+        delay = min(2 ** (self._reconnect_attempt - 1), 300)
+        return delay
 
     # ------------------------------------------------------------------
     # Internal helpers

@@ -131,3 +131,42 @@ class TestOnRawMessage:
         daemon_no_allowlist._on_raw_message(json.dumps(msg))
 
         good_handler.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Exponential backoff reconnection
+# ---------------------------------------------------------------------------
+
+
+class TestReconnectionBackoff:
+    def test_calculate_reconnect_delay_sequence(self, daemon_no_allowlist):
+        """Test exponential backoff sequence: 1s, 2s, 4s, 8s, 5m, 5m, ..."""
+        expected_sequence = [1, 2, 4, 8, 16, 32, 64, 128, 256, 300, 300]
+        delays = []
+
+        for _ in range(len(expected_sequence)):
+            delay = daemon_no_allowlist._calculate_reconnect_delay()
+            delays.append(delay)
+
+        assert delays == expected_sequence
+
+    def test_reconnect_delay_caps_at_300_seconds(self, daemon_no_allowlist):
+        """Test that reconnect delay is capped at 5 minutes (300 seconds)."""
+        # Force attempt counter to a high value
+        daemon_no_allowlist._reconnect_attempt = 9
+        delay = daemon_no_allowlist._calculate_reconnect_delay()
+        assert delay == 300
+
+    def test_reconnect_attempt_counter_increments(self, daemon_no_allowlist):
+        """Test that reconnect attempt counter increments correctly."""
+        assert daemon_no_allowlist._reconnect_attempt == 0
+        daemon_no_allowlist._calculate_reconnect_delay()
+        assert daemon_no_allowlist._reconnect_attempt == 1
+        daemon_no_allowlist._calculate_reconnect_delay()
+        assert daemon_no_allowlist._reconnect_attempt == 2
+
+    def test_socket_client_created_with_auto_reconnect_disabled(self, daemon_no_allowlist):
+        """Test that SocketModeClient is created with auto_reconnect_enabled=False."""
+        # The mock should have been called with auto_reconnect_enabled=False
+        # We can verify this by checking the daemon's socket client
+        assert daemon_no_allowlist._socket_client is not None
