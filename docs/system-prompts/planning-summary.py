@@ -45,6 +45,9 @@ USAGE:
     # Show only specific submodules (comma-separated names)
     python3 docs/system-prompts/planning-summary.py --submodules cackle,pigeon
 
+    # Find the single next ready bead by cross-project priority ordering
+    python3 docs/system-prompts/planning-summary.py --next-bead
+
 EXECUTION FOR AGENTS:
     # From project root, no venv needed (fallback reads .beads/issues.jsonl directly)
     python3 docs/system-prompts/planning-summary.py
@@ -79,7 +82,7 @@ class BeadsSummary:
         if self.beads_path == ".beads":
             try:
                 result = subprocess.run(
-                    ['bd', 'list', '--json'],
+                    ['bd', 'list', '--all', '--json'],
                     capture_output=True,
                     text=True,
                     check=True
@@ -524,31 +527,140 @@ def process_all_projects(root_path: str = ".") -> List[Dict[str, Any]]:
     return results
 
 
+def print_project_section_header(name: str, path: str, is_root: bool = False):
+    """Print a formatted project header with ASCII separation."""
+    if is_root:
+        # Root project header with special styling
+        print(f"\n┌{'─'*70}┐")
+        print(f"│ 🏠 {name:<67} │")
+        print(f"│    {path:<67} │")
+        print(f"└{'─'*70}┘")
+    else:
+        # Submodule header
+        print(f"\n├─ 📦 {name}")
+        print(f"│  path: {path}")
+
+
+def print_dashboard(projects: List[Dict[str, Any]]):
+    """Print a compact dashboard showing module status."""
+    print(f"\n{'='*100}")
+    print("  DASHBOARD - MODULE STATUS SUMMARY")
+    print(f"{'='*100}\n")
+
+    # Build module status lines
+    module_lines = []
+    totals = {'total': 0, 'closed': 0, 'in_progress': 0, 'ready': 0, 'blocked': 0}
+
+    for project in projects:
+        name = project['name']
+        summary = project['summary']
+        error = project['error']
+
+        if error or summary is None:
+            status_str = "✗ ERROR"
+            ready_str = ""
+            blocked_str = ""
+        else:
+            total = len(summary.all_beads)
+            closed = len(summary.closed)
+            ready = len(summary.ready)
+            blocked = len(summary.blocked)
+            in_progress = len(summary.in_progress)
+
+            # Calculate status indicator
+            if blocked > 0:
+                status_str = f"⚠ BLOCKED ({blocked})"
+            elif in_progress > 0:
+                status_str = f"→ IN-PROGRESS ({in_progress})"
+            elif ready > 0:
+                status_str = f"○ READY ({ready})"
+            else:
+                status_str = "✓ CLEAR"
+
+            # Build compact status line
+            ready_str = f"Ready: {ready}" if ready > 0 else ""
+            blocked_str = f"Blocked: {blocked}" if blocked > 0 else ""
+
+            totals['total'] += total
+            totals['closed'] += closed
+            totals['in_progress'] += in_progress
+            totals['ready'] += ready
+            totals['blocked'] += blocked
+
+        # Format module line (80-100 columns)
+        module_name = f"  {name:<25}"
+        status_section = f"{status_str:<25}"
+        details = f"{ready_str:<20} {blocked_str:<20}"
+        module_line = f"{module_name} {status_section} {details}"
+        module_lines.append(module_line[:100])  # Ensure max 100 columns
+
+    # Print module lines
+    for line in module_lines:
+        print(line)
+
+    # Print separator and aggregate statistics
+    print(f"\n{'-'*100}\n")
+
+    if totals['total'] > 0:
+        closed_pct = int(totals['closed'] / totals['total'] * 100)
+
+        # Summary statistics
+        print(f"  AGGREGATE STATS:")
+        print(f"    Total Beads:    {totals['total']:<6}  |  Closed: {totals['closed']:<6} ({closed_pct}%)")
+        print(f"    In-Progress:    {totals['in_progress']:<6}  |  Ready:  {totals['ready']:<6}")
+        print(f"    Blocked:        {totals['blocked']:<6}  |")
+
+        # Progress bar
+        progress_bar = '█' * (closed_pct // 5) + '░' * (20 - closed_pct // 5)
+        print(f"\n  Progress: [{progress_bar}] {closed_pct}% complete\n")
+    else:
+        print("  No beads found across any projects.\n")
+
+
 def print_multi_project_summary(projects: List[Dict[str, Any]], verbose=False, status_filter=None, label_filter=None, limit=5):
     """Print unified multi-project summary with per-project sections and aggregate stats."""
     totals = {'total': 0, 'closed': 0, 'in_progress': 0, 'ready': 0, 'blocked': 0}
 
-    for project in projects:
+    # Track if this is multi-project view
+    is_multi_project = len(projects) > 1
+
+    for idx, project in enumerate(projects):
         name = project['name']
         path = project['path']
         summary = project['summary']
         error = project['error']
 
         if error or summary is None:
-            print(f"\n{'='*60}")
-            print(f"  {name}  (path: {path})")
-            print(f"{'='*60}")
-            print(f"  ✗ Error: {error}")
+            if is_multi_project:
+                print_project_section_header(name, path, is_root=(name == 'Hentown'))
+                print(f"\n  ✗ Error: {error}\n")
+            else:
+                print(f"\n{'='*60}")
+                print(f"  {name}  (path: {path})")
+                print(f"{'='*60}")
+                print(f"  ✗ Error: {error}")
             continue
 
-        header = f"{name}  (path: {path})"
-        summary.print_summary(
-            verbose=verbose,
-            status_filter=status_filter,
-            label_filter=label_filter,
-            limit=limit,
-            project_header=header,
-        )
+        if is_multi_project:
+            # Use formatted header for multi-project view
+            print_project_section_header(name, path, is_root=(name == 'Hentown'))
+            summary.print_summary(
+                verbose=verbose,
+                status_filter=status_filter,
+                label_filter=label_filter,
+                limit=limit,
+                project_header=None,  # Header already printed above
+            )
+        else:
+            # Single project, use original header
+            header = f"{name}  (path: {path})"
+            summary.print_summary(
+                verbose=verbose,
+                status_filter=status_filter,
+                label_filter=label_filter,
+                limit=limit,
+                project_header=header,
+            )
 
         totals['total'] += len(summary.all_beads)
         totals['closed'] += len(summary.closed)
@@ -556,22 +668,104 @@ def print_multi_project_summary(projects: List[Dict[str, Any]], verbose=False, s
         totals['ready'] += len(summary.ready)
         totals['blocked'] += len(summary.blocked)
 
-    # Aggregate statistics
-    print(f"\n{'═'*60}")
-    print(f"  AGGREGATE: {len(projects)} project(s)")
-    print(f"{'═'*60}")
-    total = totals['total']
-    if total > 0:
-        closed_pct = int(totals['closed'] / total * 100)
-        print(f"  Total Beads:   {total}")
-        print(f"  Closed:        {totals['closed']} ({closed_pct}%)")
-        print(f"  In Progress:   {totals['in_progress']}")
-        print(f"  Ready:         {totals['ready']}")
-        print(f"  Blocked:       {totals['blocked']}")
-        progress_bar = '█' * (closed_pct // 5) + '░' * (20 - closed_pct // 5)
-        print(f"\n  Progress: {progress_bar} {closed_pct}% complete")
+    # Print dashboard at the end for multi-project view
+    if is_multi_project:
+        print_dashboard(projects)
+
+
+def find_next_bead(projects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Find all ready beads across projects, sorted by cross-project priority.
+
+    Sort key (ascending = higher priority first):
+      1. priority integer (0=P0 most urgent, 4=P4 lowest)
+      2. project tier (0=root project, 1=submodule)
+      3. project path lexicographic ("modules/chatterbox" < "modules/second_voice")
+      4. bead id lexicographic ("bead-abc" < "bead-def")
+
+    This implements the canonical bead ordering policy:
+    see docs/system-prompts/guides/bead-ordering.md
+
+    Returns:
+        List of candidate dicts sorted highest-priority first. Each dict has:
+          bead, project_name, project_path, project_tier
+    """
+    candidates = []
+
+    for project in projects:
+        summary = project['summary']
+        if summary is None:
+            continue
+
+        path = project['path']
+        name = project['name']
+        is_root = (path == '.')
+        project_tier = 0 if is_root else 1
+
+        for bead in summary.ready:
+            priority = bead.get('priority', 4)
+            if not isinstance(priority, int):
+                try:
+                    priority = int(priority)
+                except (ValueError, TypeError):
+                    priority = 4
+
+            candidates.append({
+                'bead': bead,
+                'project_name': name,
+                'project_path': path,
+                'project_tier': project_tier,
+                '_sort_key': (priority, project_tier, path, bead['id']),
+            })
+
+    candidates.sort(key=lambda c: c['_sort_key'])
+    return candidates
+
+
+def print_next_bead(projects: List[Dict[str, Any]]):
+    """Print the highest-priority ready bead across all projects with context."""
+    ranked = find_next_bead(projects)
+
+    if not ranked:
+        print("No ready beads found across all projects.")
+        return
+
+    top = ranked[0]
+    bead = top['bead']
+    bead_id = bead['id']
+    priority = bead.get('priority', '?')
+    priority_label = f"P{priority}" if isinstance(priority, int) else str(priority)
+    title = bead.get('title', '(no title)')
+    path = top['project_path']
+    name = top['project_name']
+    is_root = top['project_tier'] == 0
+    project_label = f"{name} (root)" if is_root else f"{path}"
+
+    if is_root:
+        claim_cmd = f"bd update {bead_id} --status=in_progress"
     else:
-        print("  No beads found across all projects.")
+        claim_cmd = f"cd {path} && bd update {bead_id} --status=in_progress"
+
+    print("Next ready bead (cross-project priority order):")
+    print()
+    print(f"  [{priority_label}] {bead_id}")
+    print(f"  Project: {project_label}")
+    print(f"  Title:   {title}")
+    print(f"  Claim:   {claim_cmd}")
+
+    if len(ranked) > 1:
+        print()
+        print(f"{'─' * 60}")
+        print(f"All ready beads ({len(ranked)}):")
+        for i, entry in enumerate(ranked, 1):
+            b = entry['bead']
+            bid = b['id']
+            p = b.get('priority', '?')
+            plabel = f"P{p}" if isinstance(p, int) else str(p)
+            t = b.get('title', '(no title)')
+            t_trunc = t[:45] + '\u2026' if len(t) > 45 else t
+            proj_path = entry['project_path']
+            proj_short = '.' if proj_path == '.' else proj_path
+            print(f"  {i:2}. [{plabel}] {bid:<16} {proj_short:<28} {t_trunc}")
 
 
 def main():
@@ -585,8 +779,16 @@ def main():
     parser.add_argument('--no-submodules', action='store_true', help='Only show Hentown root project (no submodules)')
     parser.add_argument('--submodules', type=str, metavar='NAME1,NAME2',
                         help='Comma-separated list of submodule names to include')
+    parser.add_argument('--next-bead', action='store_true',
+                        help='Show the single highest-priority ready bead across all projects (see bead-ordering.md)')
 
     args = parser.parse_args()
+
+    if args.next_bead:
+        # Always considers all submodules regardless of --no-submodules
+        projects = process_all_projects(".")
+        print_next_bead(projects)
+        return
 
     if args.no_submodules:
         # Single-project mode (original behavior)

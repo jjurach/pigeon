@@ -62,60 +62,94 @@ This workflow maintains the logs-first audit trail (Spec → Plan → Changes) w
 
 ## Multi-Project Bead Placement Strategy
 
-> **Rule:** When a project plan requires changes across multiple submodule projects, **all beads
-> (approval and implementation) must be created in the top-level parent repo** — not split across
-> submodules and not placed in a single submodule that then references sibling projects.
+Beads live as close to their work as possible, with two exceptions that stay in the top-level parent repo.
 
-### Why This Matters
+### The Three Placement Rules
 
-The `bd dep` system enforces dependencies **within a single bead database only**. Cross-repo
-dependency wiring fails silently: `bd dep add child-bead parent-bead` will error if the two
-beads live in different repos. This means:
+**Rule 1 — Single-project work stays in the module:**
+Changes self-contained within one submodule → beads live in that submodule's own `.beads/`.
+The agent working the bead runs `bd ready` from within `modules/<project>/` and sees only that project's issues. Less accidental context, more focused execution.
+
+**Rule 2 — Cross-module deps stay in the parent repo:**
+Any bead that has a live dependency crossing a module boundary — in either direction (blocks something in another module, or is blocked by something in another module) — stays in the top-level parent repo. This is because `bd dep` only enforces dependencies within a single database; cross-db dep links cannot be wired.
+
+Cross-module deps in the parent repo get **P1 priority** because resolving them unblocks module agents.
+
+**Rule 3 — Self-deferring synthesis stays in the parent repo:**
+Some work is richer when deferred until multiple module implementations exist (e.g., documentation that benefits from real usage examples across several integrators). These beads stay in the parent repo, carry explicit readiness conditions in their description, and check those conditions when dispatched — re-blocking themselves if not yet met.
+
+Self-deferring beads get **P3 priority** (low urgency; premature dispatch is harmless).
+
+### Why Cross-Module Deps Can't Split
+
+The `bd dep` system enforces dependencies **within a single bead database only**:
 
 - **`bd ready` cannot enforce cross-project prerequisites** if beads are split across repos.
-  A worker would see a bead as ready even though a mellona phase it depends on hasn't closed yet.
-- **Agents must be able to see the full dependency graph** in one place. When an agent works a
-  bead, it runs `bd show` and `bd ready` from the repo where that bead lives — it cannot
-  inspect blockers that live in a different repo's database.
-- **Approval gates would be ineffective** if the approval bead is in the top-level project but the
-  implementation beads are in submodule repos — closing the approval bead does nothing to
-  unblock the implementation beads.
+  A worker would see a bead as ready even though a dependency in another module hasn't closed yet.
+- **Cross-db `bd dep add` calls fail:** `bd dep add app-def lib-abc` errors if the two beads live in different repos.
 
-### The Rule in Practice
+Instead, cross-module blocking is handled by:
+1. Keeping the coordination bead in the parent repo (Rule 2)
+2. For beads that migrate to a module but have a soft external dependency: note it in the description. When the parent repo resolves the coordination bead, it updates the module issue and removes the note.
 
-**Single-project work** — changes are self-contained within one submodule:
-→ Beads may live in that submodule's own bead database.
+### Placement Decision Tree
 
-**Cross-project work** — changes touch two or more submodules (or a submodule and the parent):
-→ All beads live in the **top-level parent repo**.
-→ Each bead's description notes which repo(s) it touches: `repo:{submodule_name}`.
-→ The agent implementing the bead is expected to cd into the relevant repo(s) as needed.
+```
+Does this bead's work touch only one module?
+├─ No (crosses modules) → parent repo, P1
+└─ Yes
+    ├─ Does it have a dep on something in a different module?
+    │   ├─ Yes → parent repo, P1
+    │   └─ No
+    │       ├─ Is this a synthesis task that benefits from seeing multiple implementations?
+    │       │   ├─ Yes → parent repo, P3, with readiness conditions in description
+    │       │   └─ No → module .beads/, normal priority
+```
 
-### Example
-
-A plan that adds a feature to one submodule (e.g., library) and then integrates it into another (e.g., app):
+### Example: Feature Added to Library, Integrated into App
 
 ```bash
-# ✅ Correct — all in top-level parent repo
+# ✅ Correct — library work in library db; integration bead in parent (cross-module dep)
+cd modules/library && bd create "Ph1: Add feature"   # library-abc
 cd /path/to/project-root
-bd create "lib-name Ph1: Add feature"         # parent-abc  repo:modules/library
-bd create "app-name Ph1: Integrate feature"   # parent-def  repo:modules/app
-bd dep add parent-def parent-abc              # enforced ✓
+bd create "app-name: Integrate library feature"       # parent-def  (cross-module dep → stays here)
+# Cannot wire parent-def → library-abc across dbs; instead:
+# - parent-def description notes "blocked until library-abc closes"
+# - library-abc is P1 (it blocks parent-def)
 
-# ❌ Wrong — split across repos, cross-dep cannot be wired
-cd modules/library  && bd create "Ph1: Add feature"  # lib-abc
-cd modules/app && bd create "Ph1: Integrate"        # app-def
-bd dep add app-def lib-abc                          # ERROR: lib-abc not found
+# ❌ Wrong — all in parent repo when library work is self-contained
+cd /path/to/project-root
+bd create "lib-name Ph1: Add feature"    # parent-abc
+bd create "app-name: Integrate"          # parent-def
+# Now parent has noise from library internals; library agent sees unrelated issues
+```
+
+### Self-Deferring Bead Template
+
+```markdown
+## Purpose
+[What this bead produces and why it benefits from cross-module context]
+
+## Readiness Conditions
+Check each before proceeding. If any are unmet, re-block and defer:
+- [ ] <condition 1 — specific and checkable>
+- [ ] <condition 2>
+
+## If Not Ready
+Update this description with a dated status note: "Checked YYYY-MM-DD: not ready because <reason>."
+Re-block on the most relevant pending issue and stop. Do not proceed with the work.
+
+## When Ready
+[What to read, what to synthesize, what the output looks like]
 ```
 
 ### Checklist Before Creating Beads for a Multi-Project Plan
 
-- [ ] Does this plan touch more than one submodule or the parent + a submodule?
-  - **Yes →** Create all beads in the top-level parent repo.
-  - **No →** Beads may live in the relevant submodule's own database.
-- [ ] Does each bead description clearly indicate which repo it operates in?
-- [ ] Are all cross-project `bd dep add` calls resolvable from a single repo?
-- [ ] Will `bd ready` in the top-level repo correctly reflect the full unblocked state?
+- [ ] Is each bead self-contained within one module? → module .beads/
+- [ ] Does any bead have a dep crossing a module boundary? → parent repo, P1
+- [ ] Is any bead a synthesis task that benefits from seeing multiple implementations? → parent repo, P3, self-deferring template
+- [ ] Does each bead description note which repo it operates in: `repo:modules/<name>`?
+- [ ] For soft-blocked module beads: does the description note the external dep clearly?
 
 ---
 

@@ -14,7 +14,7 @@ When you see "apply iterate-next-bead.md process":
 2. **Assess** if work is needed → Check if code already exists
 3. **Implement** the gap (if any) → Write code, run tests
 4. **Verify** criteria → Tests pass, acceptance criteria met
-5. **Close** and commit → `bd update {id} --status closed`
+5. **Close** and commit → `bd close {id} -r "reason"` then `bd sync`
 
 ---
 
@@ -61,7 +61,7 @@ START: Bead is ready (bd ready shows it)
   └─ 6.4: Verify acceptance criteria met
   ↓
 [Phase 7] Close the bead and commit
-  ├─ bd update {id} --status closed
+  ├─ bd close {id} -r "reason" (properly close the bead)
   ├─ bd sync (commit bead changes)
   ├─ git add / git commit / git push (commit your code)
   └─ Document in change notes
@@ -190,8 +190,22 @@ Ready to proceed to next bead ✓
 
 ### Step 3.1: List Ready Beads
 
+**From the root project directory** (cross-project priority ordering):
+
 ```bash
-bd ready
+python3 docs/system-prompts/planning-summary.py --next-bead
+```
+
+This applies the canonical bead ordering policy (see
+`docs/system-prompts/guides/bead-ordering.md`): priority first (P0 beats P4),
+then root project over submodules at equal priority, then lexicographic
+submodule path, then lexicographic bead ID. It identifies the single
+highest-priority ready bead across all projects and submodules.
+
+**From within a single submodule** (no sub-submodules):
+
+```bash
+bd ready --sort priority
 ```
 
 ### Step 3.2: Handle "All Blocked" Scenario
@@ -231,9 +245,13 @@ If `bd ready` returns empty:
 ### Step 4.1: Select First Ready Bead
 
 ```bash
-# Grab the first ready bead (from bd ready output, typically first in order)
-NEXT_BEAD={first_ready_bead_id}
+# The --next-bead output from Phase 3 identifies the winner.
+# Record the bead ID and project path from that output:
+NEXT_BEAD={bead_id_from_next_bead_output}
+PROJECT_PATH={project_path_from_next_bead_output}  # "." for root, "modules/foo" for submodule
 ```
+
+For submodule beads, all subsequent `bd` commands must be run from `PROJECT_PATH`.
 
 ### Step 4.2: Multi-Terminal Safety Check
 
@@ -541,22 +559,40 @@ Git & Commit:
 
 ## Phase 7: Close the Bead & Sync
 
-### Step 7.1: Update Bead with Summary
+### Step 7.1: Close the Bead Properly
 
+**⚠️ IMPORTANT:** Use `bd close` command, not `bd update --status closed`. This ensures the Dolt database backend is properly updated and synced.
+
+```bash
+bd close {NEXT_BEAD} -r "brief reason why completed"
+```
+
+Example:
+```bash
+bd close hatchery-cjk -r "Comprehensive testing & error handling complete - 214 tests passing"
+```
+
+The `bd close` command will:
+- Update the bead status to "closed" in the database
+- Set the closed_at timestamp
+- Store the reason for audit trail
+- Automatically sync changes if configured
+
+**Alternative:** If you need to add detailed notes:
 ```bash
 bd update {NEXT_BEAD} --status closed \
   --append-notes="Implementation complete. All acceptance criteria met. {brief_summary_of_work}"
 ```
 
-Example:
-```bash
-bd update {bead_id} --status closed \
-  --append-notes="Config class with validation, Discovery with enumeration, Monitor with polling. 35 tests passing."
-```
+Then proceed to Step 7.2.
 
-### Step 7.2: Sync Beads Database
+### Step 7.2: Verify and Sync Beads Database
 
 ```bash
+# Verify the bead was closed
+bd show {NEXT_BEAD}
+
+# Sync beads database to git
 bd sync
 ```
 
@@ -712,7 +748,7 @@ When you see "apply iterate-next-bead.md process":
 4. If clear: follow this document from Phase 1 onwards
 5. Claim bead with: bd update {id} --status=in_progress
 6. Execute work (with Phase 5.4 completeness check)
-7. Close with: bd update {id} --status closed --append-notes "..."
+7. Close with: bd close {id} -r "completion reason"
 8. Create change documentation
 9. Run: bd sync && git add/commit/push
 ```

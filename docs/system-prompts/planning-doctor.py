@@ -20,9 +20,10 @@ from typing import List, Dict, Any, Set
 
 
 class BeadsDoctor:
-    def __init__(self, auto_fix=False, stale_threshold_hours=24):
+    def __init__(self, auto_fix=False, stale_threshold_hours=24, yes_all=False):
         self.auto_fix = auto_fix
         self.stale_threshold_hours = stale_threshold_hours
+        self.yes_all = yes_all
         self.issues = []
         self.warnings = []
         self.fixes_applied = []
@@ -33,7 +34,7 @@ class BeadsDoctor:
         # Try bd CLI first
         try:
             result = subprocess.run(
-                ['bd', 'list', '--json'],
+                ['bd', 'list', '--all', '--json'],
                 capture_output=True,
                 text=True,
                 check=True
@@ -217,15 +218,19 @@ class BeadsDoctor:
                 self.warnings.append(warning)
 
                 if self.auto_fix:
-                    # Ask for confirmation before applying
-                    print(f"\n  Fix: {bead['id']} \"{bead['title']}\"")
-                    print(f"  Suggested label: {suggested}")
-                    response = input("  Apply fix? [y/N]: ")
+                    if not getattr(self, 'yes_all', False):
+                        # Ask for confirmation before applying
+                        print(f"\n  Fix: {bead['id']} \"{bead['title']}\"")
+                        print(f"  Suggested label: {suggested}")
+                        response = input("  Apply fix? [y/N]: ")
+                        apply = response.lower() == 'y'
+                    else:
+                        apply = True
 
-                    if response.lower() == 'y':
+                    if apply:
                         try:
                             subprocess.run(
-                                ['bd', 'update', bead['id'], '--label', suggested],
+                                ['bd', 'update', bead['id'], '--set-labels', suggested],
                                 capture_output=True,
                                 check=True
                             )
@@ -247,7 +252,9 @@ class BeadsDoctor:
         """Suggest label based on bead title"""
         title_lower = title.lower()
 
-        if 'approve' in title_lower or 'approval' in title_lower:
+        if 'milestone' in title_lower or 'epic' in title_lower:
+            return 'milestone'
+        elif 'approve' in title_lower or 'approval' in title_lower:
             return 'approval'
         elif 'implement' in title_lower or 'add' in title_lower or 'create' in title_lower:
             return 'implementation'
@@ -257,8 +264,6 @@ class BeadsDoctor:
             return 'verification'
         elif 'research' in title_lower or 'investigate' in title_lower:
             return 'research'
-        elif 'milestone' in title_lower or 'epic' in title_lower:
-            return 'milestone'
         elif 'fail' in title_lower or 'error' in title_lower:
             return 'failure'
         else:
@@ -367,7 +372,7 @@ class BeadsDoctor:
                 print(f"{len(self.issues) + len(stale) + 1}. Missing Labels ({len(missing_labels)}):")
                 for warning in missing_labels:
                     print(f"   - {warning['bead_id']}: \"{warning['bead_title']}\"")
-                    print(f"     Suggested: bd update {warning['bead_id']} --label {warning['suggested_label']}")
+                    print(f"     Suggested: bd update {warning['bead_id']} --add-label {warning['suggested_label']}")
                 print()
 
             if malformed:
@@ -450,6 +455,7 @@ class BeadsDoctor:
 def main():
     parser = argparse.ArgumentParser(description='Detect and fix problems in beads database')
     parser.add_argument('--fix', action='store_true', help='Automatically fix safe issues')
+    parser.add_argument('--yes', '-y', action='store_true', help='Non-interactive mode, skip confirmation')
     parser.add_argument('--json', action='store_true', help='Output JSON')
     parser.add_argument('--check', type=str, help='Run specific check only')
     parser.add_argument('--stale-threshold', type=int, default=24, help='Stale threshold in hours (default: 24)')
@@ -457,7 +463,7 @@ def main():
 
     args = parser.parse_args()
 
-    doctor = BeadsDoctor(auto_fix=args.fix, stale_threshold_hours=args.stale_threshold)
+    doctor = BeadsDoctor(auto_fix=args.fix, stale_threshold_hours=args.stale_threshold, yes_all=args.yes)
 
     # Load beads
     if not doctor.load_beads():

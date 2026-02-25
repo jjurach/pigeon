@@ -12,6 +12,11 @@ This document defines prompt structures that work across Claude Code, Aider, Gem
 4. [Verification](#verification-pattern)
 5. [Debugging](#debugging-pattern)
 6. [Documentation](#documentation-pattern)
+7. [Code Review](#code-review-pattern)
+8. [Refactoring](#refactoring-pattern)
+9. [Testing](#testing-pattern)
+10. [Integration/System](#integrationsystem-pattern)
+11. [Provider Integration](#provider-integration-pattern)
 
 ---
 
@@ -668,6 +673,152 @@ Failure scenarios:
 
 ---
 
+## Provider Integration Pattern
+
+**When:** Integrating external service providers (APIs, SDKs, libraries) into your codebase.
+
+**Problem:** Direct API calls scatter throughout code, making it hard to:
+- Replace provider implementations
+- Mock for testing
+- Handle failures consistently
+- Migrate to new providers later
+
+**Solution:** Use library wrapper pattern with gradual migration
+
+**Template:**
+
+```
+I need to integrate [External Service] using [Library/Wrapper].
+
+Current state: [Direct API calls scattered in code]
+Goal: [Replace with library wrapper, maintain behavior]
+
+Integration approach:
+1. Create wrapper module with sync/async interfaces
+2. Configure connection/authentication
+3. Gradually replace API calls with wrapper calls
+4. Update tests with appropriate mocks
+5. Document provider options and fallbacks
+
+Files involved:
+- [Path]: Create wrapper module
+- [Path]: Update config to support provider selection
+- [Path]: Add CLI flags for provider selection (optional)
+- tests/[Path]: Update mocks for new providers
+
+Verification:
+- [ ] Wrapper module imports correctly
+- [ ] Config loads provider settings
+- [ ] 5+ API call sites migrated
+- [ ] Tests use new mocks, not old ones
+- [ ] All tests pass
+- [ ] Fallback behavior preserved
+
+Questions:
+1. Are there multiple provider options (e.g., cloud vs. local)?
+2. Should CLI allow runtime provider selection?
+3. What's the fallback if primary provider fails?
+```
+
+**Example:**
+
+```
+I need to integrate OpenRouter LLM using mellona library.
+
+Current state: AIProcessor makes raw requests.post() calls directly to OpenRouter
+Goal: Replace with SyncMellonaClient wrapper, support multiple LLM providers
+
+Integration approach:
+1. Create sync wrapper for mellona (SyncMellonaClient in config_manager.py)
+2. Add MellonaConfig with provider, model, API key
+3. Replace AIProcessor._process_openrouter() to use mellona
+4. Add config chaining: ~/.config/second_voice/ → ~/.config/mellona/
+5. Update tests to mock SyncMellonaClient instead of requests
+6. Document fallback models in config.example.json
+
+Files involved:
+- src/core/config.py: Add MellonaConfig, config chaining
+- src/core/processor.py: Replace raw requests with mellona
+- tests/conftest.py: Create mock_mellona fixture
+- tests/test_processor.py: Update mocks
+- config.example.json: Document fallback models
+
+Verification:
+- [ ] mellona imports correctly
+- [ ] ConfigurationManager loads mellona config
+- [ ] _process_openrouter() uses SyncMellonaClient
+- [ ] All 232 tests pass with new mocks
+- [ ] Config chaining preserves defaults
+- [ ] CLI can override provider (--mellona-provider)
+
+Questions:
+1. Should we support Ollama as fallback? (Yes, already done)
+2. Do we mock or actually call mellona in tests? (Mock)
+3. What happens if API key is missing? (Fall back to local Ollama)
+```
+
+**Integration Lifecycle:**
+
+| Phase | Activity | When |
+|-------|----------|------|
+| **Phase 1** | Create wrapper module | Before touching production code |
+| **Phase 2** | Configure provider settings | Add to config, not hardcoded |
+| **Phase 3** | Migrate API calls | Do 3-5 calls, test each step |
+| **Phase 4** | Update test mocks | Replace old mocks with provider mocks |
+| **Phase 5** | Add CLI support | Optional: allow runtime provider selection |
+| **Phase 6** | Document options | Config examples, fallback behavior |
+
+**Verification Checklist:**
+
+- [ ] Wrapper module can be imported
+- [ ] Configuration loads without errors
+- [ ] At least 3 code paths use new wrapper
+- [ ] Tests use new provider mocks, not old ones
+- [ ] All existing tests still pass (behavior preserved)
+- [ ] Fallback behavior documented
+- [ ] Config example shows all options (without secrets)
+- [ ] CLI flags (if added) propagate to processor
+- [ ] No direct API calls remain in main code
+
+**Key Decisions:**
+
+| Decision | Options | Recommendation |
+|----------|---------|-----------------|
+| Wrapper location | Separate module vs. inline in config | Separate module (reusable, testable) |
+| Config management | Hardcoded defaults vs. config file | Config file (testable, changeable) |
+| Config chaining | Single file vs. multiple files | Multiple files (flexibility, separation of concerns) |
+| Testing strategy | Mock provider vs. mock underlying API | Mock provider (tests the wrapper) |
+| Fallback handling | Retry vs. use alternate provider vs. error | Use alternate provider (e.g., local Ollama) |
+| CLI integration | No flags vs. provider selection vs. full override | Provider selection (balance) |
+
+**Why this pattern works:**
+
+- Isolates provider details in one place (wrapper module)
+- Allows provider swapping without touching business logic
+- Makes tests predictable (mocked providers)
+- Enables gradual migration (not all-or-nothing)
+- Supports multiple providers simultaneously (fallbacks)
+- Works on all tools (no tool-specific magic)
+
+**Common Mistakes to Avoid:**
+
+- ❌ **All-or-nothing migration:** Change all calls at once → breaks everything
+- ✅ **Gradual migration:** Do 3-5 calls, test, repeat
+
+- ❌ **No test updates:** Keep old mocks → tests don't validate new path
+- ✅ **Update mocks:** Create provider-specific mocks → tests verify integration
+
+- ❌ **Hardcoded provider selection:** Provider choice in code
+- ✅ **Config + CLI:** Provider in config, can override via CLI flag
+
+- ❌ **No fallback:** If provider fails, the whole system fails
+- ✅ **Graceful fallback:** Have alternate provider (local service, cached response, etc.)
+
+- ❌ **Secrets in config example:** API keys in config.example.json
+- ✅ **Config example without secrets:** Show all keys, no values, notes on where to get them
+
+---
+
 ## Pattern Selection Guide
 
 | Situation | Use Pattern |
@@ -682,6 +833,7 @@ Failure scenarios:
 | Improving code | Refactoring |
 | Unit tests | Testing |
 | Multiple components | Integration |
+| Integrating external services | Provider Integration |
 
 ---
 
