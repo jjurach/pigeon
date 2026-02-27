@@ -127,8 +127,9 @@ class BeadsSummary:
             dependencies = bead.get('dependencies', [])
 
             # Handle both bd CLI format and JSONL format
-            # bd format: closed, in-progress, ready, not-ready
-            # JSONL format: open (which can be blocked/ready depending on dependencies)
+            # bd status values: open, in_progress, blocked, deferred, closed
+            # JSONL format: same values; 'open' beads may be ready or dep-blocked
+            # Legacy compatibility: also handle old 'in-progress', 'ready', 'not-ready' values
             if status == 'closed':
                 self.closed.append(bead)
             elif status in ('in-progress', 'in_progress'):

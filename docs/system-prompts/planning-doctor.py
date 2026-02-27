@@ -364,8 +364,8 @@ class BeadsDoctor:
                 for warning in stale:
                     print(f"   - {warning['bead_id']}: in-progress for {warning['age_hours']}h (by {warning['assignee']})")
                 print("\n   Review and either:")
-                print("   - Close: bd update <id> --close")
-                print("   - Unclaim: bd update <id> --unclaim")
+                print("   - Close: bd close <id>")
+                print("   - Unclaim: bd update <id> --assignee='' --status open")
                 print()
 
             if missing_labels:

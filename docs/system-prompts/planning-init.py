@@ -25,7 +25,7 @@ def check_prerequisites():
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("✗ Beads CLI not installed")
         print("\nInstall beads:")
-        print("  npm install -g @steveyegge/beads")
+        print("  npm install -g @beads/bd")
         return False
 
     # Check if git is initialized
@@ -163,7 +163,7 @@ bd show <bead-id>
 bd update <bead-id> --claim
 
 # Close bead
-bd update <bead-id> --close
+bd close <bead-id>
 
 # Add dependency (child blocked by parent)
 bd dep add <child-id> <parent-id>

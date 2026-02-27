@@ -17,6 +17,17 @@
 
 This guide covers how to use **Claude Code** (the official Anthropic Claude CLI tool) with this project's AGENTS.md workflow.
 
+## ⚠️ BEAD MANIPULATION — READ THIS FIRST ⚠️
+
+**See the canonical guide for all agents:**
+[docs/system-prompts/guides/agent-beads-detection.md](../guides/agent-beads-detection.md)
+
+The short version: this project's bead database is **Dolt**, not SQLite. Never create
+or write `.beads/beads.db` directly. Always use `bd create` / `bd close`, always follow
+with `bd sync && git add .beads/issues.jsonl && git commit`.
+
+---
+
 ## Quick Start
 
 ```bash

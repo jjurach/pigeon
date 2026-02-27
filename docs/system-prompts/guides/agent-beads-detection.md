@@ -222,6 +222,36 @@ Use logs-only workflow
 
 ---
 
+## ⚠️ CRITICAL: Backend is Dolt — NEVER Manipulate SQLite Directly ⚠️
+
+This project's bead database is backed by **Dolt** (a version-controlled SQL database).
+The git-tracked export is `.beads/issues.jsonl`.
+
+**`.db` files are intentionally gitignored as legacy artifacts.** Do not create, read,
+or write them.
+
+```bash
+# ❌ WRONG — bypasses Dolt, won't appear in issues.jsonl, will confuse hatchery
+sqlite3 .beads/beads.db "INSERT INTO beads ..."
+python3 -c "sqlite3.connect('.beads/beads.db') ..."
+
+# ✅ CORRECT — always use bd CLI
+bd create "Title" --description "..." --priority 1
+```
+
+**After every `bd create` or `bd close`, you MUST run `bd sync` and commit:**
+
+```bash
+bd sync                            # flush Dolt → .beads/issues.jsonl
+git add .beads/issues.jsonl
+git commit -m "chore: sync beads after <operation>"
+```
+
+If you skip `bd sync`, the beads exist in Dolt but `issues.jsonl` is stale and the
+git history will be missing the change.
+
+---
+
 ## Commands Reference
 
 ### Check Beads Status
@@ -231,48 +261,67 @@ Use logs-only workflow
 [ -d ".beads" ] && echo "yes" || echo "no"
 
 # What beads are ready?
-bd ready
-
-# List all beads
-bd list
+bd list --status open
 
 # Show specific bead
-bd show sv-5
+bd show <bead-id>
+```
+
+### Create Beads
+
+```bash
+# Basic create (title is a positional argument)
+bd create "Title of the bead" \
+  --description "Full description of work to be done" \
+  --priority 1
+
+# Create with explicit ID (use when plan references the ID)
+bd create --id prefix-p91 \
+  --priority 0 \
+  --deps "prefix-bk7,prefix-mc4" \
+  "Title" \
+  --description "Full description..."
+
+# Create silently — returns only the ID (use in scripts)
+ID=$(bd create --silent "Title" --description "..." --priority 1)
+echo "Created: $ID"
+
+# Common flags
+#   --priority N        0=most urgent, 4=backlog (default: 2)
+#   --deps "id1,id2"    comma-separated dependency IDs
+#   --id PREFIX-xxx     explicit bead ID
+#   --type task|feature|bug|chore   (default: task)
+#   --silent            output only the bead ID
 ```
 
 ### Work with Beads
 
 ```bash
-# Create new bead
-bd create --title="Feature: X" --type=task --priority=2
-
-# Update status
-bd update sv-5 --status=in_progress
-
 # Close bead
-bd close sv-5 --reason="Completed"
+bd close <bead-id>
 
-# Sync to git
+# List by status
+bd list --status open
+
+# MANDATORY after any create/close: sync Dolt → issues.jsonl
 bd sync
+git add .beads/issues.jsonl
+git commit -m "chore: sync beads after <description>"
 ```
 
 ### Common Patterns
 
 ```bash
-# At session start: sync any remote changes
-bd sync
+# At session start: check what's ready
+bd list --status open
 
-# During work: check what's available
-bd ready
+# During work: create beads for new tasks
+bd create "Fix login bug" --description "..." --priority 1
+bd sync && git add .beads/issues.jsonl && git commit -m "chore: add login bug bead"
 
-# Before commit: finalize any status changes
-bd update <id> --status=completed
-bd sync
-
-# Before push: verify all changes are synced
-git status
-bd sync
-git push
+# On completion: close and sync
+bd close <bead-id>
+bd sync && git add .beads/issues.jsonl && git commit -m "chore: close <bead-id>"
 ```
 
 ---
