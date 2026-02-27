@@ -212,3 +212,6 @@ session_*.md
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+# Beads workflow files
+.beads/
