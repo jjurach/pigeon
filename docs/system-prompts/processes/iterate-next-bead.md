@@ -1,8 +1,8 @@
 # iterate-next-bead.md — IMPROVED VERSION
 
-**Purpose:** Guide any agent through the process of claiming, executing, and completing the next ready bead in the hatchery project, with built-in safeguards for stalled processes and multi-terminal coordination.
+**Purpose:** Guide any agent through the process of claiming, executing, and completing the next ready bead in the project, with built-in safeguards for stalled processes and multi-terminal coordination.
 
-**This document is the interim bead execution workflow** until hatchery daemon is implemented.
+**This document is the interim bead execution workflow** until the background daemon is implemented.
 
 ---
 
@@ -569,7 +569,7 @@ bd close {NEXT_BEAD} -r "brief reason why completed"
 
 Example:
 ```bash
-bd close hatchery-cjk -r "Comprehensive testing & error handling complete - 214 tests passing"
+bd close proj-cjk -r "Comprehensive testing & error handling complete - 214 tests passing"
 ```
 
 The `bd close` command will:
@@ -694,7 +694,7 @@ IF ready beads exist:
   → You can work on multiple beads in one session!
 
 ELSE:
-  → Print: "No more ready beads. All hatchery work blocked or complete."
+  → Print: "No more ready beads. All work is blocked or complete."
   → Halt (wait for human to unblock or create new work)
 ```
 

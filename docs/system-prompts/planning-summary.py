@@ -2,7 +2,7 @@
 """
 Planning Summary - Display execution status for beads task tracking
 
-This script provides a comprehensive view of task execution status across Hentown and all
+This script provides a comprehensive view of task execution status across the root project and all
 git submodules that have a .beads/ directory. By default, it auto-discovers and includes
 beads from all initialized submodules alongside the root project.
 
@@ -39,7 +39,7 @@ USAGE:
     # Limit number of closed beads shown (default: 5)
     python3 docs/system-prompts/planning-summary.py --limit 10
 
-    # Show only root Hentown project (no submodules)
+    # Show only root project (no submodules)
     python3 docs/system-prompts/planning-summary.py --no-submodules
 
     # Show only specific submodules (comma-separated names)
@@ -58,6 +58,7 @@ EXECUTION FOR AGENTS:
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -65,7 +66,7 @@ from typing import List, Dict, Any
 
 
 class BeadsSummary:
-    def __init__(self, project_name: str = "Hentown", beads_path: str = ".beads"):
+    def __init__(self, project_name: str = "root", beads_path: str = ".beads"):
         self.project_name = project_name
         self.beads_path = beads_path
         self.all_beads = []
@@ -78,14 +79,31 @@ class BeadsSummary:
     def load_beads(self) -> bool:
         """Load all beads from database - tries bd CLI first, falls back to {beads_path}/issues.jsonl"""
         jsonl_path = f"{self.beads_path}/issues.jsonl"
-        # Try bd CLI first (only works for local .beads/ in cwd)
+        # Try bd CLI first (works for root .beads/ or submodules with cwd)
         if self.beads_path == ".beads":
+            # Root project - run bd list from current directory
             try:
                 result = subprocess.run(
                     ['bd', 'list', '--all', '--json'],
                     capture_output=True,
                     text=True,
                     check=True
+                )
+                self.all_beads = json.loads(result.stdout)
+                return True
+            except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError):
+                pass  # Fall through to JSONL fallback
+        else:
+            # Submodule - extract the root directory and run bd list from there
+            # beads_path looks like "modules/hatchery/.beads"
+            submodule_root = os.path.dirname(self.beads_path)
+            try:
+                result = subprocess.run(
+                    ['bd', 'list', '--all', '--json'],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    cwd=submodule_root
                 )
                 self.all_beads = json.loads(result.stdout)
                 return True
@@ -475,7 +493,7 @@ def find_beads_in_submodules(root_path: str = ".") -> List[Dict[str, str]]:
 
 
 def process_all_projects(root_path: str = ".") -> List[Dict[str, Any]]:
-    """Process Hentown root project plus all submodules with .beads/ directories.
+    """Process root project plus all submodules with .beads/ directories.
 
     For each project, creates a BeadsSummary instance, loads beads, and categorizes them.
     Failures in individual projects are isolated - one project's error does not stop others.
@@ -491,17 +509,21 @@ def process_all_projects(root_path: str = ".") -> List[Dict[str, Any]]:
     results = []
     start_time = time.monotonic()
 
-    # Process root Hentown project first
-    root_summary = BeadsSummary(project_name="Hentown", beads_path=".beads")
+    # Detect root project name
+    root_abs = os.path.abspath(root_path)
+    root_name = os.path.basename(root_abs)
+
+    # Process root project first
+    root_summary = BeadsSummary(project_name=root_name, beads_path=".beads")
     try:
         if root_summary.load_beads():
             root_summary.categorize_beads()
-            results.append({'name': 'Hentown', 'path': '.', 'summary': root_summary, 'error': None})
+            results.append({'name': root_name, 'path': '.', 'summary': root_summary, 'error': None})
         else:
-            results.append({'name': 'Hentown', 'path': '.', 'summary': None, 'error': 'Failed to load beads'})
+            results.append({'name': root_name, 'path': '.', 'summary': None, 'error': 'Failed to load beads'})
     except Exception as e:
-        print(f"Error processing Hentown: {e}", file=sys.stderr)
-        results.append({'name': 'Hentown', 'path': '.', 'summary': None, 'error': str(e)})
+        print(f"Error processing root project: {e}", file=sys.stderr)
+        results.append({'name': root_name, 'path': '.', 'summary': None, 'error': str(e)})
 
     # Process each submodule with a .beads/ directory
     submodule_beads = find_beads_in_submodules(root_path)
@@ -633,7 +655,7 @@ def print_multi_project_summary(projects: List[Dict[str, Any]], verbose=False, s
 
         if error or summary is None:
             if is_multi_project:
-                print_project_section_header(name, path, is_root=(name == 'Hentown'))
+                print_project_section_header(name, path, is_root=(path == '.'))
                 print(f"\n  ✗ Error: {error}\n")
             else:
                 print(f"\n{'='*60}")
@@ -644,7 +666,7 @@ def print_multi_project_summary(projects: List[Dict[str, Any]], verbose=False, s
 
         if is_multi_project:
             # Use formatted header for multi-project view
-            print_project_section_header(name, path, is_root=(name == 'Hentown'))
+            print_project_section_header(name, path, is_root=(path == '.'))
             summary.print_summary(
                 verbose=verbose,
                 status_filter=status_filter,
@@ -777,7 +799,7 @@ def main():
     parser.add_argument('--verbose', action='store_true', help='Show full descriptions')
     parser.add_argument('--json', action='store_true', help='Output JSON')
     parser.add_argument('--limit', type=int, default=5, help='Limit number of closed beads shown (default: 5)')
-    parser.add_argument('--no-submodules', action='store_true', help='Only show Hentown root project (no submodules)')
+    parser.add_argument('--no-submodules', action='store_true', help='Only show root project (no submodules)')
     parser.add_argument('--submodules', type=str, metavar='NAME1,NAME2',
                         help='Comma-separated list of submodule names to include')
     parser.add_argument('--next-bead', action='store_true',

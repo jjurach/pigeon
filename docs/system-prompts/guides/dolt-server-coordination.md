@@ -8,7 +8,7 @@
 
 ## Architecture Overview
 
-Hentown uses a **shared Dolt server** model where all agents and tools communicate with a single server instance. This differs from ad-hoc instance creation and ensures:
+This project uses a **shared Dolt server** model where all agents and tools communicate with a single server instance. This differs from ad-hoc instance creation and ensures:
 
 - ✓ One database source of truth
 - ✓ Efficient resource usage
@@ -335,10 +335,10 @@ export BEADS_DIR="${BEADS_DIR:-./.beads}"
 export DOLT_PORT="${DOLT_PORT:-(auto)}"
 
 # Database name (default: from config.yaml)
-export DOLT_DB_NAME="${DOLT_DB_NAME:-hentown}"
+export DOLT_DB_NAME="${DOLT_DB_NAME:-$(basename "$PWD")}"
 
 # Server data directory (for container/ephemeral environments)
-export DOLT_DATA_DIR="${XDG_RUNTIME_DIR}/dolt-hentown"
+export DOLT_DATA_DIR="${XDG_RUNTIME_DIR}/dolt-${PROJECT_NAME:-$(basename "$PWD")}"
 ```
 
 ---

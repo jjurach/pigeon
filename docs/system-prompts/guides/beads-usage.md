@@ -56,7 +56,7 @@ bd list --json
 bd ready --json
 
 # Specific bead by ID
-bd show hatchery-p91 --json
+bd show myproj-p91 --json
 
 # Filter by status
 bd list --status open --json
@@ -82,7 +82,7 @@ bd list --all --json    # includes closed
 
 ```json
 {
-  "id": "hatchery-p91",
+  "id": "myproj-p91",
   "title": "Create PersistentDispatchQueue",
   "description": "Full description text...",
   "status": "open",
@@ -193,12 +193,12 @@ match Dolt: `open`, `in_progress`, `blocked`, `deferred`, `closed`.
 
 ---
 
-## Python Integration in Hatchery
+## Python Integration
 
-Hatchery wraps `bd` via `DoltBeadDatabase` in `hatchery/beads_dolt.py`:
+Many projects wrap `bd` via a `DoltBeadDatabase` class in a `beads.py` module:
 
 ```python
-from hatchery.beads import open_bead_db
+from mypackage.beads import open_bead_db
 
 # Auto-detects Dolt dir vs SQLite file:
 db = open_bead_db(path)         # returns DoltBeadDatabase or BeadDatabase
@@ -213,7 +213,7 @@ db.reset_to_pending(id)         # → bool (bd update --status=open)
 db.update_agent_pid(id, pid)    # → bool (bd update --notes=agent_pid=N)
 ```
 
-The `Bead` dataclass uses hatchery's internal status names (`pending`, `done`,
+The `Bead` dataclass uses the internal status names (`pending`, `done`,
 `in_progress`, `blocked`) which map from Dolt's `open`/`closed`.
 
 ---
@@ -231,7 +231,7 @@ conn.execute("UPDATE beads SET status='closed' WHERE id=?", (bead_id,))
 # ❌ WRONG: reading .db files as if they're the source of truth
 db_path = ".beads/beads.db"  # This file doesn't exist in Dolt-backed projects
 
-# ✅ CORRECT: use bd CLI or hatchery's DoltBeadDatabase wrapper
+# ✅ CORRECT: use bd CLI or a DoltBeadDatabase wrapper
 db = open_bead_db(Path(".beads"))
 db.mark_closed(bead_id)
 ```
@@ -246,7 +246,7 @@ db.mark_closed(bead_id)
 
 ### Architecture: Shared Server Model
 
-Hentown uses a **shared Dolt server** (singleton instance per machine), not ad-hoc instances spawned by individual agents. This enables:
+This project uses a **shared Dolt server** (singleton instance per machine), not ad-hoc instances spawned by individual agents. This enables:
 - Efficient resource usage (one server handles all agents)
 - Consistent data access (single source of truth)
 - Graceful shutdown and state preservation
@@ -316,9 +316,9 @@ For multi-user or container environments, consider:
 
 ```bash
 # Allow custom state directory (default: .beads/)
-export BEADS_STATE_DIR="${XDG_RUNTIME_DIR}/hentown-beads"
-# or: /tmp/hentown-beads-$USER
-# or: /run/user/$(id -u)/hentown-beads
+export BEADS_STATE_DIR="${XDG_RUNTIME_DIR}/${PROJECT_NAME:-myproject}-beads"
+# or: /tmp/${PROJECT_NAME:-myproject}-beads-$USER
+# or: /run/user/$(id -u)/${PROJECT_NAME:-myproject}-beads
 ```
 
 This keeps state files off the persistent filesystem for ephemeral sessions.

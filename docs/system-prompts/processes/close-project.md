@@ -328,7 +328,7 @@ Check:
 
 2. **Close the bead**
    ```bash
-   bd update <bead-id> --close
+   bd close <bead-id>
    ```
 
 3. **Verify closure**
@@ -343,7 +343,7 @@ Check:
 **Example:**
 ```bash
 # If bead ID is bd-a1b2.1
-bd update bd-a1b2.1 --close
+bd close bd-a1b2.1
 
 # Verify
 bd show bd-a1b2.1

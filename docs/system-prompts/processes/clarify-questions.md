@@ -41,7 +41,7 @@ Apply on-demand when:
 ### Phase 1: Discovery (Agent-Driven Research)
 
 **Duration**: 5-15 minutes
-**Context**: Agent runs this in project/hentown context
+**Context**: Agent runs this in the project context
 
 Agent performs:
 ```
@@ -255,7 +255,7 @@ Agent actions:
 ## Implementation Checklist for Agents
 
 ### Before Starting
-- [ ] Identify scope (e.g., "slack integration across hatchery and pigeon")
+- [ ] Identify scope (e.g., "feature X across module-a and module-b")
 - [ ] Check if in bead context (executing as bead task) or standalone
 - [ ] Confirm `docs/system-prompts/processes/clarify-questions-template.md` exists in project
 
@@ -264,7 +264,7 @@ Agent actions:
 - [ ] List recent closed beads (last 20)
 - [ ] Read recent dev_notes changes
 - [ ] Read relevant architecture/design docs
-- [ ] Check related projects (hentown, sibling modules)
+- [ ] Check related projects (root project and sibling modules)
 
 ### Phase 2: Synthesis
 - [ ] Generate 5 questions using universal template

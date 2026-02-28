@@ -87,7 +87,7 @@ def log_error_with_context(project: str, file: str, error: Exception):
 
 ```
 ERROR [project=pigeon] [file=spec.md]: PermissionError: Cannot read /path/to/file
-WARNING [project=mellona] [file=config.yaml]: YAML parse error at line 42
+WARNING [project=myproject] [file=config.yaml]: YAML parse error at line 42
 ```
 
 **Benefits:**
