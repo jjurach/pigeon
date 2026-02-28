@@ -16,10 +16,10 @@ Unlike **workflows/** (which describe how agents execute tasks), **processes/** 
 
 **File:** [iterate-next-bead.md](./iterate-next-bead.md)
 
-**Description:** Interim workflow for claiming, executing, and completing beads until the hatchery daemon is implemented. Provides multi-terminal coordination, stall detection, and safe bead progression.
+**Description:** Interim workflow for claiming, executing, and completing beads until the background daemon is implemented. Provides multi-terminal coordination, stall detection, and safe bead progression.
 
 **When to apply:**
-- **Always** when working on hentown beads (interim until hatchery daemon Phase 3+)
+- **Always** when working on project beads (interim until daemon Phase 3+)
 - Automatically invoked when iterating on any bead-tracked work
 
 **What it does:**

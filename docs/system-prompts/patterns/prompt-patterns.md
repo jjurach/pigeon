@@ -723,33 +723,33 @@ Questions:
 **Example:**
 
 ```
-I need to integrate OpenRouter LLM using mellona library.
+I need to integrate OpenRouter LLM using ai-provider-lib library.
 
 Current state: AIProcessor makes raw requests.post() calls directly to OpenRouter
-Goal: Replace with SyncMellonaClient wrapper, support multiple LLM providers
+Goal: Replace with SyncProviderClient wrapper, support multiple LLM providers
 
 Integration approach:
-1. Create sync wrapper for mellona (SyncMellonaClient in config_manager.py)
-2. Add MellonaConfig with provider, model, API key
-3. Replace AIProcessor._process_openrouter() to use mellona
-4. Add config chaining: ~/.config/second_voice/ → ~/.config/mellona/
-5. Update tests to mock SyncMellonaClient instead of requests
+1. Create sync wrapper for ai-provider-lib (SyncProviderClient in config_manager.py)
+2. Add ProviderConfig with provider, model, API key
+3. Replace AIProcessor._process_openrouter() to use ai-provider-lib
+4. Add config chaining: ~/.config/mymodule/ → ~/.config/ai-provider-lib/
+5. Update tests to mock SyncProviderClient instead of requests
 6. Document fallback models in config.example.json
 
 Files involved:
-- src/core/config.py: Add MellonaConfig, config chaining
-- src/core/processor.py: Replace raw requests with mellona
-- tests/conftest.py: Create mock_mellona fixture
+- src/core/config.py: Add ProviderConfig, config chaining
+- src/core/processor.py: Replace raw requests with ai-provider-lib
+- tests/conftest.py: Create mock_provider fixture
 - tests/test_processor.py: Update mocks
 - config.example.json: Document fallback models
 
 Verification:
-- [ ] mellona imports correctly
-- [ ] ConfigurationManager loads mellona config
-- [ ] _process_openrouter() uses SyncMellonaClient
+- [ ] ai-provider-lib imports correctly
+- [ ] ConfigurationManager loads provider config
+- [ ] _process_openrouter() uses SyncProviderClient
 - [ ] All 232 tests pass with new mocks
 - [ ] Config chaining preserves defaults
-- [ ] CLI can override provider (--mellona-provider)
+- [ ] CLI can override provider (--provider)
 
 Questions:
 1. Should we support Ollama as fallback? (Yes, already done)

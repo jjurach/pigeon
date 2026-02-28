@@ -121,10 +121,10 @@ User: `"apply iterate-next-bead.md"`
 User: `"claim the next ready bead and implement it"`
 → **Apply iterate-next-bead.md process**
 
-User: `"work on the next hatchery bead"`
+User: `"work on the next bead"`
 → **Apply iterate-next-bead.md process**
 
-User: `"process bead hentown-07r"`
+User: `"process bead proj-07r"`
 → **Apply iterate-next-bead.md process (with specific bead)**
 
 ### Ambiguous Cases ⚠️

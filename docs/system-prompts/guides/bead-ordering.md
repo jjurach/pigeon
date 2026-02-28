@@ -109,8 +109,8 @@ Next ready bead (cross-project priority order):
 ────────────────────────────────────────────────────────────
 All ready beads (3):
    1. [P1] chatterbox-xyz     modules/chatterbox           "Implement retry logic for provi…"
-   2. [P2] hentown-abc        .                            "Update workflow documentation"
-   3. [P3] hatchery-def       modules/hatchery             "Add config validation"
+   2. [P2] root-abc           .                            "Update workflow documentation"
+   3. [P3] sub-abc            modules/sub                  "Add config validation"
 ```
 
 ### For Orchestrators (Programmatic)

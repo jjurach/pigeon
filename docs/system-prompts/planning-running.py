@@ -52,25 +52,52 @@ class AgentProcessInspector:
         'cline': re.compile(r'cline'),
     }
 
-    HENTOWN_PROJECTS = {
-        'hentown': '/home/phaedrus/hentown',
-        'mellona': '/home/phaedrus/hentown/modules/mellona',
-        'second_voice': '/home/phaedrus/hentown/modules/second_voice',
-        'pigeon': '/home/phaedrus/hentown/modules/pigeon',
-        'hatchery': '/home/phaedrus/hentown/modules/hatchery',
-        'chatterbox': '/home/phaedrus/hentown/modules/chatterbox',
-        'chatvault': '/home/phaedrus/hentown/modules/chatvault',
-        'logist': '/home/phaedrus/hentown/modules/logist',
-        'oneshot': '/home/phaedrus/hentown/modules/oneshot',
-        'whisper': '/home/phaedrus/hentown/modules/whisper',
-        'google-personal-mcp': '/home/phaedrus/hentown/modules/google-personal-mcp',
-        'slack-agent-mcp': '/home/phaedrus/hentown/modules/slack-agent-mcp',
-    }
-
     def __init__(self):
         self.my_ppid = os.getppid()  # Parent of current process
         self.my_pid = os.getpid()
         self.processes: List[ProcessInfo] = []
+
+        # Discover projects dynamically via git commands
+        self.PROJECTS = self._discover_projects()
+
+    def _discover_projects(self) -> dict:
+        """Discover root project and all git submodules.
+
+        Returns:
+            Dictionary mapping project basenames to their absolute paths.
+            Includes root project + all submodules with .beads/ directories.
+        """
+        projects = {}
+
+        # Find git root
+        try:
+            result = subprocess.run(
+                ['git', 'rev-parse', '--show-toplevel'],
+                capture_output=True, text=True, timeout=5
+            )
+            root = result.stdout.strip() if result.returncode == 0 else os.getcwd()
+        except Exception:
+            root = os.getcwd()
+
+        # Add root project
+        root_name = os.path.basename(root)
+        projects[root_name] = root
+
+        # Discover submodules
+        try:
+            result = subprocess.run(
+                ['git', 'submodule', 'foreach', '--quiet', 'echo $sm_path'],
+                capture_output=True, text=True, timeout=10, cwd=root
+            )
+            for line in result.stdout.strip().splitlines():
+                line = line.strip()
+                if line:
+                    sub_name = os.path.basename(line)
+                    projects[sub_name] = os.path.join(root, line)
+        except Exception:
+            pass
+
+        return projects
 
     def get_all_processes(self) -> List[Dict]:
         """Get list of all processes from ps."""
@@ -133,12 +160,13 @@ class AgentProcessInspector:
                 timeout=5
             )
             files = []
+            home = os.environ.get('HOME', os.path.expanduser('~'))
             for line in result.stdout.split('\n')[1:]:  # skip header
                 parts = line.split()
                 if len(parts) >= 9:
                     filepath = ' '.join(parts[8:])
                     # Filter to user files, ignore libs/pipes
-                    if filepath.startswith('/home') or filepath.startswith('/tmp'):
+                    if filepath.startswith(home) or filepath.startswith('/tmp'):
                         if not any(x in filepath for x in ['.so', '.a', '.o']):
                             files.append(filepath)
             return files[:limit]
@@ -146,12 +174,12 @@ class AgentProcessInspector:
             return []
 
     def infer_projects(self, cwd: str, files: List[str]) -> List[str]:
-        """Infer which hentown projects this process is working on."""
+        """Infer which projects this process is working on."""
         projects = []
         search_paths = [cwd] + files
 
         for path in search_paths:
-            for proj_name, proj_path in self.HENTOWN_PROJECTS.items():
+            for proj_name, proj_path in self.PROJECTS.items():
                 if proj_path in path:
                     if proj_name not in projects:
                         projects.append(proj_name)

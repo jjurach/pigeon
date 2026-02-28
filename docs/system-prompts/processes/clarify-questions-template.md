@@ -31,32 +31,30 @@ maintainability / team understanding / performance characteristics]
 - Spec: [related architecture doc]
 ```
 
-### Example 1: Slack Integration - Channel Architecture
+### Example 1: [Feature] - [Decision Point]
 
 ```
-### Question 1: Slack Channel Architecture—Dedicated vs. Shared Channels?
+### Question 1: [Feature] [Architecture Aspect]—[Option A] vs. [Option B]?
 
 **Context**:
-Recent research shows multiple projects need Slack presence. The top-level project
-uses dedicated channels (#activity, #inbox). New projects could post to these shared
-channels OR create dedicated project channels.
+Recent research shows [finding from project state]. The [related component]
+uses [existing pattern]. [Scope] could follow multiple approaches.
 
 **Options**:
-- Option A: **Unified Channels** - All projects post status to #activity
-  (Pros: Single pane of glass for all automation; Cons: more noise, harder to filter)
-- Option B: **Dedicated Channels** - Each project→their own #project-activity channel
-  (Pros: clear separation, each project owns their channel; Cons: users must monitor multiple channels)
-- Option C: **Hybrid** - Activity goes to dedicated channels, high-priority alerts to shared #activity
-  (Pros: detailed info where it belongs, critical alerts visible everywhere; Cons: complexity in priority logic)
+- Option A: **[Approach 1 Name]** - [Description with tradeoffs]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
+- Option B: **[Approach 2 Name]** - [Description with tradeoffs]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
+- Option C: **[Approach 3 Name]** - [Description with tradeoffs]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
 
 **Why This Matters**:
-This shapes how notifications are organized, affects user experience (information density),
-and sets pattern for future projects that will also need Slack integration.
+This decision shapes [impact 1], [impact 2], and [sets pattern for impact 3].
 
 **Related Recent Work**:
-- Commit: 9e6d746 (hatchery Epic 5 planning)
-- Spec: dev_notes/project_plans/2026-02-19_00-07-17_hatchery-epic-5-slack-integration.md
-- Bead: {related_bead_id} (related phase - similar notification patterns needed)
+- Commit: [commit hash] ([what changed])
+- Spec: dev_notes/project_plans/[date_filename]
+- Bead: [related_bead_id] (related phase)
 ```
 
 ---
@@ -88,33 +86,32 @@ confidence / future refactoring effort / dependency choices.
 - Commit: [recent related change]
 ```
 
-### Example 2: Slack Integration - Configuration Management
+### Example 2: [Feature] - Standards Compliance
 
 ```
-### Question 2: Slack Config—Environment Variables vs. Config File vs. Secrets Manager?
+### Question 2: [Component] [Standards Area]—[Approach A] vs. [Approach B]?
 
 **Context**:
-Research shows hatchery currently uses `hatchery/config.py` + `.env` files (pattern
-from logist, google-personal-mcp). Slack tokens are sensitive credentials. Modern
-Python practices (e.g., python-dotenv, python-decouple) suggest centralizing credential
-management. Recent mellona work established a config hierarchy pattern.
+Research shows [project] currently uses [current pattern] (pattern
+from [related module(s)]). [Concern about current approach]. Modern
+[technology/standard] practices suggest [recommendation].
 
 **Options**:
-- Option A: **Status Quo (.env + config.py)** - Continue current pattern, update .env.example
-  (Pros: already works, team familiar; Cons: credentials in .env during development, doesn't scale)
-- Option B: **Secrets Manager (OS-level)** - Use keyring/python-keyring, fallback to env vars
-  (Pros: encrypted storage, production-ready; Cons: requires setup, more complex for dev)
-- Option C: **Config Hierarchy** - ~/.config/{project_name}/ for user, env vars as override
-  (Pros: scalable, follows modern Python conventions; Cons: more code, requires documentation)
+- Option A: **[Approach 1]** - [Description of implementation]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
+- Option B: **[Approach 2]** - [Description of implementation]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
+- Option C: **[Approach 3]** - [Description of implementation]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
 
 **Why This Matters**:
-Configuration management choice affects: security posture / developer experience / production
-deployment complexity / how other projects (pigeon, mellona) will integrate Slack.
+[Standards/approach] choice affects: [impact 1] / [impact 2] / [impact 3] /
+how other projects will [related concern].
 
 **Related Recent Work**:
-- Spec: dev_notes/specs/2026-02-18_mellona-pigeon-specification.md (config patterns)
-- Commit: d6d9f27 (mellona keys CLI - keyring backend integration)
-- Bead: {example_bead_id} (keyring backend implementation)
+- Spec: dev_notes/specs/[date_filename].md ([topic])
+- Commit: [commit hash] ([what changed])
+- Bead: [example_bead_id] ([related work])
 ```
 
 ---
@@ -147,34 +144,31 @@ adoption / maintenance burden / knowledge preservation / future refactoring risk
 - Commit: [documentation-related change]
 ```
 
-### Example 3: Slack Integration - Documentation Scope
+### Example 3: [Feature] - Documentation Scope
 
 ```
-### Question 3: Slack Integration Documentation—Scope for MVP?
+### Question 3: [Feature] Documentation—Scope for MVP?
 
 **Context**:
-Slack integration is novel for hatchery/pigeon ecosystem. Users need to: setup bot
-credentials, configure channels, understand rate limits, troubleshoot connection issues.
-Recent mellona work created comprehensive provider docs. Team has limited doc bandwidth.
+[Feature] is [assessment of novelty/importance]. Users need to: [task 1],
+[task 2], [task 3], [task 4]. Recent [related work] created [documentation level].
+Team has [constraint: time/resources/bandwidth].
 
 **Options**:
-- Option A: **Minimal (Setup Only)** - .env.example, quick setup instructions in README
-  (Pros: fast to write, covers immediate need; Cons: users struggle with troubleshooting,
-  limited adoption)
-- Option B: **Comprehensive** - Setup guide, architecture deep-dive, troubleshooting,
-  rate limit guide, security best practices
-  (Pros: self-service, professional appearance; Cons: effort-intensive, maintenance burden)
-- Option C: **Progressive** - MVP docs (setup + basic troubleshooting), expand based on
-  real user questions captured in beads
-  (Pros: focused on real needs, manageable effort; Cons: requires discipline to update)
+- Option A: **Minimal** - [What's included], [coverage]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
+- Option B: **Comprehensive** - [What's included], [coverage]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
+- Option C: **Progressive** - [What's included], [coverage]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
 
 **Why This Matters**:
-Documentation scope shapes: ease of adoption / support load / ability to scale to other
-modules / team time investment / user confidence in integration reliability.
+Documentation scope shapes: [impact 1] / [impact 2] / [impact 3] /
+[cross-module concern].
 
 **Related Recent Work**:
-- Spec: dev_notes/project_plans/2026-02-19_00-07-17_hatchery-epic-5-slack-integration.md
-- Bead: {related_bead_id} (documentation patterns from project integration work)
+- Spec: dev_notes/project_plans/[date_filename]
+- Bead: [related_bead_id] (documentation patterns from [related work])
 ```
 
 ---
@@ -205,35 +199,31 @@ contributor friction / consistency with other modules / ability to adapt to new 
 - Lessons Learned: [what we learned from similar feature]
 ```
 
-### Example 4: Slack Integration - Error Handling & Recovery
+### Example 4: [Feature] - Maintainability & Resilience
 
 ```
-### Question 4: Slack Integration—Error Handling & Recovery Strategy?
+### Question 4: [Feature]—Error Handling & Recovery Strategy?
 
 **Context**:
-Slack connection is network-dependent. Research shows hatchery daemon should be resilient
-to network failures, credential expiry, rate limits. Recent mellona work on provider
-fallback chains showed complexity of retry logic. Current project patterns are minimal.
+[Feature] depends on [external system/concern]. Research shows [component] should be resilient
+to [failure modes]. Recent [related work] on [similar pattern] showed complexity of [concern].
+Current project patterns are [assessment].
 
 **Options**:
-- Option A: **Minimal** - Log errors, continue daemon, manual recovery
-  (Pros: simple code, fast to implement; Cons: daemon silently fails Slack, user unaware,
-  manual fix required)
-- Option B: **Comprehensive** - Exponential backoff, circuit breaker, automatic reconnection,
-  slack error notifications to admin email
-  (Pros: production-ready, excellent reliability; Cons: ~200 lines code, testing complexity)
-- Option C: **Pragmatic** - Automatic reconnect with jitter, log errors prominently,
-  CLI command to check Slack health status
-  (Pros: catches most failures, maintainable; Cons: still some manual intervention needed)
+- Option A: **Minimal** - [What's included], [coverage]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
+- Option B: **Comprehensive** - [What's included], [coverage]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
+- Option C: **Pragmatic** - [What's included], [coverage]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
 
 **Why This Matters**:
-Error handling choice affects: production reliability / debugging time when things break /
-user frustration / whether users trust automation / future feature additions (pigeon,
-mellona also depend on Slack reliability).
+Error handling choice affects: [impact 1] / [impact 2] / [impact 3] /
+whether [stakeholders] trust [feature].
 
 **Related Recent Work**:
-- Spec: dev_notes/specs/2026-02-20_23-35-00.md (executor pool error handling)
-- Lessons Learned: (from project builds, network resilience issues)
+- Spec: dev_notes/specs/[date_filename].md ([topic])
+- Lessons Learned: [relevant patterns]
 ```
 
 ---
@@ -267,42 +257,36 @@ efforts.
 - Bead: [related work in other module]
 ```
 
-### Example 5: Slack Integration - Unified vs. Project-Specific
+### Example 5: [Feature] - Cross-Module Consistency
 
 ```
-### Question 5: Slack Integration—Unified hatchery-pigeon-mellona Client or Separate?
+### Question 5: [Feature]—[Unified/Separate/Phased] Approach?
 
 **Context**:
-Hatchery, pigeon, and mellona all need Slack presence. Research shows:
-- hatchery needs activity notifications + interactive commands
-- Project needs shared inbox listener + message routing
-- mellona might eventually need execution status updates
+[Module-a], [module-b], and [module-c] all need [feature]. Research shows:
+- [module-a] needs [requirement 1]
+- [module-b] needs [requirement 2]
+- [module-c] might eventually need [requirement 3]
 
-Current plan: separate SlackClient implementations in each. But this duplicates:
-auth, reconnection logic, message formatting, error handling. Mellona already
-established shared library pattern for LLM providers.
+Current plan: [approach]. But this [potential issue: duplication/complexity/coordination].
+[Related work] already established [relevant pattern].
 
 **Options**:
-- Option A: **Separate Clients** - Each project owns its Slack integration
-  (Pros: autonomy, no cross-project coordination; Cons: duplicate code, inconsistent
-  error handling, hard to upgrade shared behavior)
-- Option B: **Shared Slack Library** - Create shared-slack (reusable) for
-  common patterns, projects build on top
-  (Pros: DRY, consistent behavior, easier maintenance; Cons: upfront effort, coordination
-  overhead, future integration work)
-- Option C: **Phased Approach** - Start separate, extract shared client once patterns clear
-  (Pros: learn what's actually shared before abstracting; Cons: refactoring burden later,
-  temporary duplication)
+- Option A: **[Approach 1]** - [Description with ownership/coordination model]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
+- Option B: **[Approach 2]** - [Description with ownership/coordination model]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
+- Option C: **[Approach 3]** - [Description with ownership/coordination model]
+  (Pros: [benefit 1], [benefit 2]; Cons: [tradeoff 1], [tradeoff 2])
 
 **Why This Matters**:
-Architectural choice affects: code maintenance burden across 3 projects / ability to
-fix bugs centrally / future module additions / team velocity on Slack-related changes /
-risk of inconsistent user experience across modules.
+Architectural choice affects: [impact 1] / [impact 2] / [impact 3] /
+risk of [consequence].
 
 **Related Recent Work**:
-- Architecture: mellona library design (shared provider abstraction)
-- Spec: dev_notes/specs/2026-02-18_mellona-pigeon-specification.md
-- Epic: Project Slack integration beads ({bead_id_1}, {bead_id_2})
+- Architecture: [design reference]
+- Spec: dev_notes/specs/[date_filename]
+- Epic: [Feature] beads across modules
 ```
 
 ---
