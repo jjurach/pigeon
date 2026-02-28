@@ -238,20 +238,149 @@ db.mark_closed(bead_id)
 
 ---
 
+## Dolt Server Architecture & Agent Coordination
+
+> **Detailed Guide:** See [dolt-server-coordination.md](./dolt-server-coordination.md) for comprehensive agent startup procedures, multi-agent coordination patterns, and troubleshooting.
+
+### Overview
+
+### Architecture: Shared Server Model
+
+Hentown uses a **shared Dolt server** (singleton instance per machine), not ad-hoc instances spawned by individual agents. This enables:
+- Efficient resource usage (one server handles all agents)
+- Consistent data access (single source of truth)
+- Graceful shutdown and state preservation
+
+### Process Files (Runtime Artifacts)
+
+The following files track the Dolt server's lifecycle and **MUST be gitignored** (they are machine-specific and volatile):
+
+| File | Purpose | Created by | Lifecycle |
+|------|---------|-----------|-----------|
+| `.beads/dolt-server.pid` | Server process ID | `bd` on startup | Persists across sessions; cleared on shutdown |
+| `.beads/dolt-server.port` | Server TCP port | `bd` on startup | Persists; used by agents to connect |
+| `.beads/dolt-monitor.pid` | Monitor process ID | `bd` on startup | Ensures server restart on crash |
+| `.beads/dolt-server.activity` | Last activity timestamp | `bd` on mutations | Tracks server health |
+| `.beads/bd.sock` | Unix domain socket | `bd` on startup | Local IPC for CLI communication |
+
+**Status:** All gitignored (see `.gitignore` and `.beads/.gitignore`). Never commit these files.
+
+### Agent Startup Checks (MANDATORY)
+
+Before spawning a Dolt server or attempting operations, agents **MUST** check for an existing server:
+
+```bash
+# Check if server is already running
+if [ -f .beads/dolt-server.pid ]; then
+  server_pid=$(cat .beads/dolt-server.pid)
+  if kill -0 "$server_pid" 2>/dev/null; then
+    # Server is alive, reuse it
+    echo "Dolt server already running (PID: $server_pid)"
+    exit 0
+  else
+    # Stale PID file, safe to remove and start new server
+    rm -f .beads/dolt-server.pid .beads/dolt-server.port
+  fi
+fi
+
+# Safe to start server now
+bd init  # or whatever startup command
+```
+
+**Why:** Prevents port conflicts, connection failures, and zombie processes.
+
+### Fork Protection & Git Workflow
+
+The project uses Git's fork protection (`.git/info/exclude`) to prevent accidental commits of machine-specific state:
+
+```bash
+# .git/info/exclude (automatically configured by bd init)
+.beads/dolt-server.pid
+.beads/dolt-monitor.pid
+.beads/dolt-server.port
+.beads/dolt-server.activity
+.beads/bd.sock
+# ... and others
+```
+
+**Never override with `git add -f`** on these files. If you need to force-add a `.beads/.gitignore` update:
+
+```bash
+git add -f .beads/.gitignore  # OK: updating ignore rules
+git add -f .beads/dolt-server.pid  # ❌ WRONG: committing runtime state
+```
+
+### Runtime State Isolation
+
+For multi-user or container environments, consider:
+
+```bash
+# Allow custom state directory (default: .beads/)
+export BEADS_STATE_DIR="${XDG_RUNTIME_DIR}/hentown-beads"
+# or: /tmp/hentown-beads-$USER
+# or: /run/user/$(id -u)/hentown-beads
+```
+
+This keeps state files off the persistent filesystem for ephemeral sessions.
+
+### State File Cleanup
+
+State files are **automatically cleaned** on graceful server shutdown. For manual cleanup:
+
+```bash
+# Safe to delete (will be recreated on next start)
+rm -f .beads/dolt-server.pid
+rm -f .beads/dolt-server.port
+rm -f .beads/dolt-monitor.pid
+rm -f .beads/dolt-server.activity
+rm -f .beads/bd.sock
+
+# Do NOT manually delete .beads/dolt/ (the actual database)
+```
+
+---
+
 ## `.beads/` Directory Layout
 
 ```
 .beads/
-├── config.yaml          # bd configuration (git-tracked)
-├── dolt/                # Dolt binary database (gitignored)
-│   └── <db-name>/       # Actual database files
-├── export-state/        # Sync state (gitignored)
-├── hooks/               # Git hook scripts
-├── interactions.jsonl   # Agent interaction log (git-tracked)
-├── issues.jsonl         # Dolt export — THE git-tracked bead store
-├── metadata.json        # Backend declaration (git-tracked)
-└── README.md            # Label conventions (git-tracked)
+├── config.yaml                  # bd configuration (git-tracked)
+├── dolt/                        # Dolt binary database (gitignored)
+│   └── <db-name>/               # Actual database files
+├── export-state/                # Sync state (gitignored)
+├── hooks/                       # Git hook scripts
+├── interactions.jsonl           # Agent interaction log (git-tracked)
+├── issues.jsonl                 # Dolt export — THE git-tracked bead store
+├── metadata.json                # Backend declaration (git-tracked)
+├── README.md                    # Label conventions (git-tracked)
+│
+│ # Runtime state (gitignored - see below)
+├── dolt-server.pid              # Server process ID (gitignored)
+├── dolt-server.port             # Server TCP port (gitignored)
+├── dolt-monitor.pid             # Monitor process ID (gitignored)
+├── dolt-server.activity         # Activity timestamp (gitignored)
+├── bd.sock                      # Unix socket (gitignored)
+├── bd.sock.startlock            # Startup lock (gitignored)
+└── ephemeral.sqlite3            # Session cache (gitignored)
 ```
 
-The `.beads/.gitignore` explicitly excludes `dolt/`, `*.db`, `*.db-wal`, and all
-legacy SQLite artifacts.
+### Git Tracking Rules
+
+**Git-tracked** (committed to version control):
+- `config.yaml` — bd CLI configuration
+- `issues.jsonl` — Authoritative bead database export (synced by `bd sync`)
+- `interactions.jsonl` — Agent interaction history
+- `metadata.json` — Backend metadata
+- `README.md` — Label and convention documentation
+
+**Gitignored** (persisted locally, never committed):
+- `dolt/` — Dolt binary database directory
+- `*.pid` — Process IDs (machine-specific, ephemeral)
+- `*.port` — TCP port numbers (machine-specific)
+- `*.activity` — Activity timestamps (machine-specific)
+- `*.sock` — Unix sockets (machine-specific)
+- `*.sqlite*` — Ephemeral caches (intentionally transient)
+- `export-state/` — Sync state (per-machine)
+
+The `.beads/.gitignore` explicitly excludes these patterns. See "Git Hygiene Audit"
+(docs/2026-02-28_git-hygiene-audit.md) for details on process file management.
