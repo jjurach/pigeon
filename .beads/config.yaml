@@ -3,6 +3,15 @@
 # All settings can also be set via environment variables (BD_* prefix)
 # or overridden with command-line flags
 
+# Shared Dolt server — this is a SUBMODULE project.
+# Connect to the central server owned by the hentown top-level project.
+# DO NOT start a local Dolt server from this directory.
+# If the server is not running, bd commands will fail — start it from hentown root: bd dolt start
+dolt:
+  auto-start: false
+  host: 127.0.0.1
+  port: 3307
+
 # Issue prefix for this repository (used by bd init)
 # If not set, bd init will auto-detect from directory name
 # Example: issue-prefix: "myproject" creates issues like "myproject-1", "myproject-2", etc.
