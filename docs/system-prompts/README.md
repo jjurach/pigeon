@@ -75,12 +75,27 @@ See `docs/system-prompts/processes/tool-entry-points.md` for the complete archit
 
 The `docs/system-prompts/guides/` directory contains implementation guides for agents:
 
-1. **Beads Sticky Attribute** (`beads-sticky-attribute.md`)
+1. **Beads Usage Guide** (`beads-usage.md`)
+   - Authoritative interface for reading and writing bead databases
+   - `bd` CLI command reference (create, update, close, dependencies)
+   - Data source hierarchy (Dolt as source of truth, JSONL as git-tracked export)
+   - Python integration via Hatchery's `DoltBeadDatabase`
+   - `.beads/` directory layout and git tracking rules
+
+2. **Dolt Server Coordination** (`dolt-server-coordination.md`)
+   - Shared Dolt server architecture and process file management
+   - **MANDATORY** agent startup checks (prevent port conflicts, zombie processes)
+   - Multi-agent coordination patterns (sequential, parallel, graceful degradation)
+   - Shutdown and cleanup procedures
+   - Troubleshooting guide for common issues
+   - Best practices for agents and multi-user environments
+
+3. **Beads Sticky Attribute** (`beads-sticky-attribute.md`)
    - Explains when beads becomes active for a project
    - Shows how beads persists across sessions
    - Decision tree for agents to detect beads status
 
-2. **Agent Beads Detection** (`agent-beads-detection.md`)
+4. **Agent Beads Detection** (`agent-beads-detection.md`)
    - Quick start checklist for detecting beads at session start
    - How to decide whether to use beads in project plans
    - Common scenarios and troubleshooting
