@@ -4,6 +4,10 @@
 **Purpose:** Coordinate safe startup, operation, and shutdown of the shared Dolt server
 **Status:** Mandatory for multi-agent deployments
 
+> **⚠ CRITICAL DISTINCTION**
+> - `bd dolt start` — starts the Dolt server process. Safe to re-run. Use this to restart after a crash or suspend.
+> - `bd init` — **destructive first-time setup**. Wipes and recreates the database. Never run on an already-initialized project or from a submodule directory.
+
 ---
 
 ## Multi-Project Architecture (hentown)
@@ -39,8 +43,9 @@ modules/pigeon/                 ← SUBMODULE: same pattern
 ### Submodule Responsibilities
 
 - **DO NOT** start a Dolt server from a submodule directory
+- **DO NOT** run `bd init` from a submodule directory — it is already initialized and will create a rogue local database that shadows the canonical one
 - **DO** connect to the superproject's server at `127.0.0.1:3307`
-- **ABORT** if the server is not running — do not attempt to start it
+- **ABORT** if the server is not running — do not attempt to start it; instead navigate to the superproject root and run `bd dolt start` there
 
 ### Finding the Superproject Root
 
@@ -148,7 +153,7 @@ fi
 
 # Server not running, proceed with startup
 echo "Starting Dolt server..."
-bd init  # or appropriate startup command
+bd dolt start  # NOTE: use bd dolt start, NOT bd init (bd init is destructive first-time setup)
 ```
 
 ### Phase 2: Initialize if Needed
@@ -156,8 +161,8 @@ bd init  # or appropriate startup command
 ```bash
 # Only run if server doesn't exist
 if ! [ -f ".beads/dolt-server.pid" ] || ! kill -0 $(cat .beads/dolt-server.pid) 2>/dev/null; then
-  cd /path/to/project
-  bd init
+  cd /path/to/hentown-root  # must run from the TOP-LEVEL project, not a submodule
+  bd dolt start
   sleep 1  # Give server time to write PID/port files
 fi
 ```
@@ -185,7 +190,7 @@ For agents that run sequentially:
 ```bash
 # In agent1:
 if ! [ -f .beads/dolt-server.pid ]; then
-  bd init
+  bd dolt start
 fi
 bd create "agent1 work"
 bd close agent1-123
@@ -208,7 +213,7 @@ lock_file=".beads/bd.sock.startlock"
 
   # Recheck after acquiring lock (another agent might have started server)
   if ! [ -f .beads/dolt-server.pid ] || ! kill -0 $(cat .beads/dolt-server.pid) 2>/dev/null; then
-    bd init
+    bd dolt start
   fi
 ) 9> "$lock_file"
 
@@ -336,7 +341,7 @@ kill -9 <PID>
 rm -f .beads/dolt-server.{pid,port,activity}
 
 # Restart
-bd init
+bd dolt start
 ```
 
 ### Symptom: "Can't connect to Dolt server"
@@ -353,7 +358,7 @@ kill -0 $pid 2>/dev/null || {
 }
 
 # Restart
-bd init
+bd dolt start
 bd list  # Verify connectivity
 ```
 
@@ -372,7 +377,7 @@ ps aux | grep dolt
 # Last resort: restart server
 pkill -9 dolt
 rm -f .beads/dolt-server.{pid,port,activity}
-bd init
+bd dolt start
 ```
 
 ---
