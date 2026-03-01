@@ -7,10 +7,10 @@ git submodules that have a .beads/ directory. By default, it auto-discovers and 
 beads from all initialized submodules alongside the root project.
 
 ARCHITECTURE:
-- Primary: Uses 'bd list --json' command if beads CLI is available (root project only)
-- Fallback: Reads directly from .beads/issues.jsonl if bd CLI fails
-- Submodules: Always reads directly from <submodule>/.beads/issues.jsonl
-- This ensures it works in any environment (with or without beads CLI)
+- Primary: Uses 'bd list --all --json' command if beads CLI is available (root and submodules)
+- Fallback: Reads directly from .beads/issues.jsonl if bd CLI fails or Dolt is unreachable
+- Submodules: Runs 'bd list --all --json' with cwd=<submodule_root>; falls back to JSONL
+- This ensures it works in any environment (with or without beads CLI / Dolt server)
 
 MULTI-PROJECT SUPPORT:
 - Automatically discovers git submodules from .gitmodules
@@ -277,7 +277,7 @@ class BeadsSummary:
                 suffix = f"(closed {time_ago})"
             elif status in ('in-progress', 'in_progress'):
                 icon = '→'
-                time_ago = self.format_time_ago(bead.get('claimed_at'))
+                time_ago = self.format_time_ago(bead.get('claimed_at') or bead.get('updated_at'))
                 suffix = f"(claimed {time_ago})"
             elif is_ready:
                 icon = '○'
@@ -302,7 +302,7 @@ class BeadsSummary:
                 print(f"  {icon} {bead_id}  {title}")
                 print(f"     Labels: {', '.join(labels)}")
                 print(f"     {suffix}")
-                body = bead.get('body', '')
+                body = bead.get('description', '')
                 if body:
                     # Print first 3 lines of description
                     lines = body.split('\n')[:3]
@@ -357,7 +357,7 @@ class BeadsSummary:
             print(f"  ❌ {bead_id}  {title}")
             if verbose:
                 print(f"     Created: {time_ago}")
-                body = bead.get('body', '')
+                body = bead.get('description', '')
                 if 'Original bead:' in body:
                     # Extract original bead reference
                     for line in body.split('\n'):
@@ -836,7 +836,7 @@ def main():
     # Apply --submodules filter if specified
     if args.submodules:
         names = {n.strip() for n in args.submodules.split(',')}
-        projects = [p for p in projects if p['name'] == 'Hentown' or p['name'] in names]
+        projects = [p for p in projects if p['path'] == '.' or p['name'] in names]
 
     if args.json:
         output = {'projects': []}

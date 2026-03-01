@@ -246,7 +246,7 @@ db.mark_closed(bead_id)
 
 ### Architecture: Shared Server Model
 
-Hentown uses a **shared Dolt server** (singleton instance per machine), not ad-hoc instances spawned by individual agents. This enables:
+This project uses a **shared Dolt server** (singleton instance per machine), not ad-hoc instances spawned by individual agents. This enables:
 - Efficient resource usage (one server handles all agents)
 - Consistent data access (single source of truth)
 - Graceful shutdown and state preservation
@@ -316,9 +316,9 @@ For multi-user or container environments, consider:
 
 ```bash
 # Allow custom state directory (default: .beads/)
-export BEADS_STATE_DIR="${XDG_RUNTIME_DIR}/hentown-beads"
-# or: /tmp/hentown-beads-$USER
-# or: /run/user/$(id -u)/hentown-beads
+export BEADS_STATE_DIR="${XDG_RUNTIME_DIR}/${PROJECT_NAME:-myproject}-beads"
+# or: /tmp/${PROJECT_NAME:-myproject}-beads-$USER
+# or: /run/user/$(id -u)/${PROJECT_NAME:-myproject}-beads
 ```
 
 This keeps state files off the persistent filesystem for ephemeral sessions.

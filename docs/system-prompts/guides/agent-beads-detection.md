@@ -26,6 +26,28 @@ fi
 
 ---
 
+## Dolt Server: Required for All bd Commands
+
+All `bd` commands require a running Dolt server.
+
+**If any `bd` command fails with any of these messages:**
+- `Dolt server not running`
+- `Dolt server unreachable`
+- `failed to connect to Dolt server`
+- `failed to open database`
+- `no beads database found`
+
+**→ STOP. Apply the project's infrastructure bootstrap process before doing anything else.**
+
+The bootstrap process is defined in this project's `AGENTS.md` under the beads/Dolt
+infrastructure section. Do not attempt workarounds or manual Dolt startup without
+following that process — it ensures all databases, tools, and environment are correctly
+initialized.
+
+**Do not proceed with any beads work until the Dolt server is confirmed running.**
+
+---
+
 ## The Decision: Will This Plan Use Beads?
 
 ### YES: Use Beads Commands In Your Plan
