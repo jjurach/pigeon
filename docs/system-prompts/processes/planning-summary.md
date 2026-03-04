@@ -33,7 +33,8 @@ By default, the script:
 - Shows aggregate statistics across all projects at the end
 
 Use `--no-submodules` to view only root project beads, or `--submodules name1,name2` to
-include only specific submodules.
+include only specific submodules. When specifying submodules, you can use either the full
+path (e.g., `modules/hatchery`) or just the last component (e.g., `hatchery`).
 
 ---
 
@@ -64,8 +65,10 @@ python3 docs/system-prompts/planning-summary.py
 # Root project only (no submodules)
 python3 docs/system-prompts/planning-summary.py --no-submodules
 
-# Specific submodules only
+# Specific submodules only (by short name or full path)
 python3 docs/system-prompts/planning-summary.py --submodules cackle,pigeon
+python3 docs/system-prompts/planning-summary.py --submodules modules/cackle,modules/pigeon
+python3 docs/system-prompts/planning-summary.py --submodules hatchery  # Short name
 ```
 
 **Example output:**
@@ -570,8 +573,10 @@ python3 docs/system-prompts/planning-summary.py --status closed --limit 0
 # Root project only (skip submodules)
 python3 docs/system-prompts/planning-summary.py --no-submodules
 
-# Include only specific submodules
+# Include only specific submodules (use short names or full paths)
 python3 docs/system-prompts/planning-summary.py --submodules cackle,pigeon
+python3 docs/system-prompts/planning-summary.py --submodules modules/cackle,modules/pigeon
+python3 docs/system-prompts/planning-summary.py --submodules hatchery
 ```
 
 ---

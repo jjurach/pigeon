@@ -209,7 +209,7 @@ class WorkerPool:
 
 **Implementation:**
 ```python
-def dispatch_worker(bead_id):
+def dispatch_worker(bead_id, bead_details):
     """
     Spawn a worker agent to implement the given bead.
 
@@ -218,12 +218,27 @@ def dispatch_worker(bead_id):
     2. Read task details (bd show <id>)
     3. Implement the task
     4. Follow close-project.md (includes closing bead)
+    5. Honor jurisdiction rules (write-local, escalate-upward)
     """
+
+    # Extract jurisdiction from bead notes or description
+    jurisdiction = extract_jurisdiction(bead_details)
+    jurisdiction_section = f"\n\nJURISDICTION & CROSS-PROJECT RULES:\n{jurisdiction}\n" if jurisdiction else ""
+
     prompt = f"""Implement bead {bead_id}
 
 Use `bd show {bead_id}` to see task details.
 Follow close-project.md process when complete.
 Include bead ID in change documentation: `Bead: {bead_id}`
+{jurisdiction_section}
+MANDATORY RULES:
+1. Read [Agent Jurisdiction & Cross-Project Coordination](docs/system-prompts/principles/agent-jurisdiction.md) before starting
+2. Write-local rule: Write ONLY to your own project directory (modules/<your-project>/ or hentown/)
+3. Reads-permitted rule: You MAY read sibling projects for context, but never to justify writing outside your jurisdiction
+4. Escalation rule: If blocked by work in another module, create a FAILURE bead in hentown (do NOT write to sibling projects)
+5. Bead creation rule: Create beads in your own .beads/ database or in hentown for escalation only
+
+If uncertain about your jurisdiction, err on the side of caution and escalate via a FAILURE bead in hentown.
 """
 
     # Spawn Claude agent with prompt

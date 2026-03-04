@@ -59,10 +59,12 @@ EXECUTION FOR AGENTS:
 import argparse
 import json
 import os
+import re
+import socket
 import subprocess
 import sys
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
 
 
 class BeadsSummary:
@@ -227,7 +229,66 @@ class BeadsSummary:
         except Exception:
             return "unknown"
 
-    def print_summary(self, verbose=False, status_filter=None, label_filter=None, limit=5, project_header=None):
+    def parse_cross_deps(self, notes: str) -> List[Tuple[str, str]]:
+        """Parse cross-deps from bead notes.
+
+        Format: cross-deps: <id>=<required-status>[, ...]
+        Returns: List of (bead_id, required_status) tuples, or empty list if none found
+        """
+        if not notes:
+            return []
+
+        # Look for "cross-deps:" line
+        for line in notes.split('\n'):
+            if 'cross-deps:' in line.lower():
+                # Extract everything after "cross-deps:"
+                match = re.search(r'cross-deps:\s*(.+?)(?:\n|$)', line, re.IGNORECASE)
+                if match:
+                    dep_str = match.group(1).strip()
+                    deps = []
+                    # Parse comma-separated entries
+                    for entry in dep_str.split(','):
+                        entry = entry.strip()
+                        if '=' in entry:
+                            bead_id, status = entry.split('=', 1)
+                            deps.append((bead_id.strip(), status.strip()))
+                    return deps
+        return []
+
+    def check_cross_deps(self, bead: Dict[str, Any], all_beads_by_id: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+        """Check cross-deps for a bead and return metadata about them.
+
+        Returns:
+            {
+                'deps': List[Tuple[bead_id, required_status]],
+                'met': List[Tuple[bead_id, required_status, actual_status]],
+                'unmet': List[Tuple[bead_id, required_status, actual_status]],
+                'all_met': bool
+            }
+        """
+        notes = bead.get('notes', '')
+        deps = self.parse_cross_deps(notes)
+
+        met = []
+        unmet = []
+
+        for bead_id, required_status in deps:
+            referenced_bead = all_beads_by_id.get(bead_id)
+            actual_status = referenced_bead.get('status', 'unknown') if referenced_bead else 'not-found'
+
+            if actual_status == required_status:
+                met.append((bead_id, required_status, actual_status))
+            else:
+                unmet.append((bead_id, required_status, actual_status))
+
+        return {
+            'deps': deps,
+            'met': met,
+            'unmet': unmet,
+            'all_met': len(unmet) == 0 and len(deps) > 0
+        }
+
+    def print_summary(self, verbose=False, status_filter=None, label_filter=None, limit=5, project_header=None, show_cross_deps=True):
         """Print summary of beads"""
         if project_header:
             print(f"\n{'='*60}")
@@ -240,20 +301,38 @@ class BeadsSummary:
         # Apply filters
         if status_filter:
             filtered = self.filter_by_status(status_filter)
-            self.print_bead_list(filtered, status_filter.title(), verbose, limit=0)  # Show all when filtering
+            self.print_bead_list(filtered, status_filter.title(), verbose, limit=0, show_cross_deps=show_cross_deps)  # Show all when filtering
         elif label_filter:
             filtered = self.filter_by_label(label_filter)
-            self.print_bead_list(filtered, f"Label: {label_filter}", verbose, limit=0)
+            self.print_bead_list(filtered, f"Label: {label_filter}", verbose, limit=0, show_cross_deps=show_cross_deps)
         else:
             # Show all categories
-            self.print_recently_closed(verbose, limit)
-            self.print_in_progress(verbose)
-            self.print_ready(verbose)
-            self.print_blocked(verbose)
+            self.print_recently_closed(verbose, limit, show_cross_deps)
+            self.print_in_progress(verbose, show_cross_deps)
+            self.print_ready(verbose, show_cross_deps)
+            self.print_blocked(verbose, show_cross_deps)
             self.print_failures(verbose)
             self.print_statistics()
 
-    def print_bead_list(self, beads: List[Dict], title: str, verbose: bool, limit: int = 0):
+    def print_cross_deps_annotation(self, bead: Dict[str, Any], all_beads_by_id: Dict[str, Dict[str, Any]], use_color: bool = True):
+        """Print cross-deps annotation for a bead if it has any."""
+        cross_deps_info = self.check_cross_deps(bead, all_beads_by_id)
+        if not cross_deps_info['deps']:
+            return
+
+        for bead_id, required_status, actual_status in cross_deps_info['unmet']:
+            if use_color:
+                print(f"     ⛓  {bead_id}={required_status}  ✗ {actual_status}   ← unmet")
+            else:
+                print(f"     ⛓  {bead_id}={required_status}  ✗ {actual_status}")
+
+        for bead_id, required_status, actual_status in cross_deps_info['met']:
+            if use_color:
+                print(f"     ⛓  {bead_id}={required_status}  ✓ {actual_status}")
+            else:
+                print(f"     ⛓  {bead_id}={required_status}  ✓ {actual_status}")
+
+    def print_bead_list(self, beads: List[Dict], title: str, verbose: bool, limit: int = 0, show_cross_deps: bool = True):
         """Print a list of beads"""
         if not beads:
             return
@@ -261,6 +340,9 @@ class BeadsSummary:
         print(f"\n{title} ({len(beads)}):")
 
         display_beads = beads[:limit] if limit > 0 else beads
+
+        # Build lookup map for cross-deps checking
+        all_beads_by_id = {b['id']: b for b in self.all_beads}
 
         for bead in display_beads:
             bead_id = bead['id']
@@ -302,6 +384,8 @@ class BeadsSummary:
                 print(f"  {icon} {bead_id}  {title}")
                 print(f"     Labels: {', '.join(labels)}")
                 print(f"     {suffix}")
+                if show_cross_deps:
+                    self.print_cross_deps_annotation(bead, all_beads_by_id)
                 body = bead.get('description', '')
                 if body:
                     # Print first 3 lines of description
@@ -314,8 +398,10 @@ class BeadsSummary:
                 # Compact format
                 title_truncated = title[:40] if len(title) > 40 else title
                 print(f"  {icon} {bead_id:<12} {title_truncated:<40} {suffix}")
+                if show_cross_deps:
+                    self.print_cross_deps_annotation(bead, all_beads_by_id, use_color=False)
 
-    def print_recently_closed(self, verbose: bool, limit: int):
+    def print_recently_closed(self, verbose: bool, limit: int, show_cross_deps: bool = True):
         """Print recently closed beads"""
         # Sort by closed time (most recent first)
         sorted_closed = sorted(
@@ -323,25 +409,25 @@ class BeadsSummary:
             key=lambda b: b['closed_at'],
             reverse=True
         )
-        self.print_bead_list(sorted_closed, f"Recently Closed (last {limit})", verbose, limit)
+        self.print_bead_list(sorted_closed, f"Recently Closed (last {limit})", verbose, limit, show_cross_deps=show_cross_deps)
 
-    def print_in_progress(self, verbose: bool):
+    def print_in_progress(self, verbose: bool, show_cross_deps: bool = True):
         """Print in-progress beads"""
         if not self.in_progress:
             return
-        self.print_bead_list(self.in_progress, "Currently In Progress", verbose)
+        self.print_bead_list(self.in_progress, "Currently In Progress", verbose, show_cross_deps=show_cross_deps)
 
-    def print_ready(self, verbose: bool):
+    def print_ready(self, verbose: bool, show_cross_deps: bool = True):
         """Print ready beads"""
         if not self.ready:
             return
-        self.print_bead_list(self.ready, "Ready to Work", verbose)
+        self.print_bead_list(self.ready, "Ready to Work", verbose, show_cross_deps=show_cross_deps)
 
-    def print_blocked(self, verbose: bool):
+    def print_blocked(self, verbose: bool, show_cross_deps: bool = True):
         """Print blocked beads"""
         if not self.blocked:
             return
-        self.print_bead_list(self.blocked, "Blocked", verbose)
+        self.print_bead_list(self.blocked, "Blocked", verbose, show_cross_deps=show_cross_deps)
 
     def print_failures(self, verbose: bool):
         """Print failure beads"""
@@ -419,6 +505,350 @@ class BeadsSummary:
             'failures': self.failures
         }
         print(json.dumps(output, indent=2))
+
+
+# Helper functions for dense dashboard
+
+def check_pid_alive(pid: int) -> bool:
+    """Check if a process with given PID is alive.
+
+    Uses psutil if available; falls back to simple /proc check on Linux.
+    Returns True if process is alive, False otherwise.
+    """
+    try:
+        import psutil
+        try:
+            p = psutil.Process(pid)
+            return p.is_running()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return False
+    except ImportError:
+        # Fallback: try to use os.kill with signal 0 (non-destructive check)
+        try:
+            os.kill(pid, 0)
+            return True
+        except (OSError, ProcessLookupError):
+            return False
+
+
+def get_relative_time(timestamp: str) -> str:
+    """Format timestamp as relative time (e.g., '2h elapsed', '1d elapsed')"""
+    if not timestamp:
+        return "unknown"
+
+    try:
+        ts = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        now = datetime.now(ts.tzinfo)
+        delta = now - ts
+        seconds = delta.total_seconds()
+
+        if seconds < 60:
+            return "just now"
+        elif seconds < 3600:
+            minutes = int(seconds / 60)
+            return f"{minutes}m elapsed"
+        elif seconds < 86400:
+            hours = int(seconds / 3600)
+            return f"{hours}h elapsed"
+        else:
+            days = int(seconds / 86400)
+            return f"{days}d elapsed"
+    except Exception:
+        return "unknown"
+
+
+# Functions for dense dashboard output
+
+def get_all_beads_map(projects: List[Dict[str, Any]]) -> Dict[str, Tuple[Dict[str, Any], str, str]]:
+    """Create a map of all beads across all projects.
+
+    Returns: {bead_id: (bead_dict, project_name, project_path)}
+    """
+    all_beads = {}
+    for project in projects:
+        summary = project['summary']
+        if summary is None:
+            continue
+        for bead in summary.all_beads:
+            bead_id = bead['id']
+            all_beads[bead_id] = (bead, project['name'], project['path'])
+    return all_beads
+
+
+def check_cross_deps_met(bead: Dict[str, Any], all_beads_map: Dict[str, Tuple[Dict[str, Any], str, str]]) -> Tuple[bool, List[str]]:
+    """Check if all cross-deps for a bead are met.
+
+    Returns: (all_met: bool, unmet_reason: List[str])
+    """
+    summary = BeadsSummary()  # Just for parse_cross_deps method
+    notes = bead.get('notes', '')
+    deps = summary.parse_cross_deps(notes)
+
+    unmet_reasons = []
+    for bead_id, required_status in deps:
+        if bead_id not in all_beads_map:
+            unmet_reasons.append(f"{bead_id} not found")
+            continue
+
+        ref_bead, _, _ = all_beads_map[bead_id]
+        actual_status = ref_bead.get('status', 'unknown')
+        if actual_status != required_status:
+            unmet_reasons.append(f"{bead_id}={required_status} (actual: {actual_status})")
+
+    return len(unmet_reasons) == 0 and len(deps) > 0, unmet_reasons
+
+
+def get_dashboard_in_progress(projects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Get list of in-progress beads with PID/hostname status."""
+    in_progress = []
+    current_hostname = socket.gethostname()
+
+    for project in projects:
+        summary = project['summary']
+        if summary is None:
+            continue
+
+        for bead in summary.in_progress:
+            notes = bead.get('notes', {})
+            agent_pid = notes.get('agent_pid') if isinstance(notes, dict) else None
+            hostname = notes.get('hostname') if isinstance(notes, dict) else None
+
+            pid_status = None
+            if agent_pid:
+                if hostname == current_hostname:
+                    is_alive = check_pid_alive(agent_pid)
+                    pid_status = f"Running (pid {agent_pid})" if is_alive else f"Stale (pid {agent_pid} not found)"
+                else:
+                    pid_status = f"Remote (host: {hostname})"
+
+            in_progress.append({
+                'bead': bead,
+                'project_name': project['name'],
+                'pid_status': pid_status
+            })
+
+    return in_progress
+
+
+def get_dashboard_next_beads(projects: List[Dict[str, Any]], n: int = 20, check_cross_deps: bool = True) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Get next N ready beads with cross-dep enforcement.
+
+    Returns: (available_beads, blocked_beads)
+    Each entry is: {bead, project_name, project_path, project_tier, blocked_reason (optional)}
+    """
+    all_beads_map = get_all_beads_map(projects)
+    candidates = []
+
+    # Collect all ready beads
+    for project in projects:
+        summary = project['summary']
+        if summary is None:
+            continue
+
+        path = project['path']
+        name = project['name']
+        is_root = (path == '.')
+        project_tier = 0 if is_root else 1
+
+        for bead in summary.ready:
+            priority = bead.get('priority', 4)
+            if not isinstance(priority, int):
+                try:
+                    priority = int(priority)
+                except (ValueError, TypeError):
+                    priority = 4
+
+            candidates.append({
+                'bead': bead,
+                'project_name': name,
+                'project_path': path,
+                'project_tier': project_tier,
+                '_sort_key': (priority, project_tier, path, bead['id']),
+            })
+
+    candidates.sort(key=lambda c: c['_sort_key'])
+
+    # Split into available and blocked by cross-deps
+    available = []
+    blocked = []
+
+    for candidate in candidates:
+        bead = candidate['bead']
+
+        if check_cross_deps:
+            all_met, unmet_reasons = check_cross_deps_met(bead, all_beads_map)
+            if not all_met and unmet_reasons:
+                candidate['blocked_reason'] = ', '.join(unmet_reasons)
+                blocked.append(candidate)
+                continue
+
+        available.append(candidate)
+        if len(available) >= n:
+            break
+
+    # Add remaining as blocked if they didn't make the cut due to slot limits
+    blocked.extend(candidates[len(available):])
+
+    return available[:n], blocked
+
+
+def get_approval_beads(projects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Get all approval beads that are open/ready."""
+    approval_beads = []
+
+    for project in projects:
+        summary = project['summary']
+        if summary is None:
+            continue
+
+        for bead in summary.all_beads:
+            labels = bead.get('labels', [])
+            status = bead.get('status', 'unknown')
+
+            if 'approval' in labels and status in ('open', 'ready'):
+                approval_beads.append({
+                    'bead': bead,
+                    'project_name': project['name'],
+                    'project_path': project['path']
+                })
+
+    return approval_beads
+
+
+def get_intervention_beads(projects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Get beads requiring human intervention (failures or blocked with notes)."""
+    intervention_beads = []
+
+    for project in projects:
+        summary = project['summary']
+        if summary is None:
+            continue
+
+        # Failures
+        for bead in summary.failures:
+            intervention_beads.append({
+                'bead': bead,
+                'project_name': project['name'],
+                'reason': 'failure',
+                'type': 'failure'
+            })
+
+        # Blocked beads with notes suggesting intervention
+        for bead in summary.blocked:
+            notes = bead.get('notes', '')
+            if notes and any(keyword in notes.lower() for keyword in ['resume', 'intervention', 'session']):
+                intervention_beads.append({
+                    'bead': bead,
+                    'project_name': project['name'],
+                    'reason': 'blocked',
+                    'type': 'blocked'
+                })
+
+    return intervention_beads
+
+
+def print_dense_dashboard(projects: List[Dict[str, Any]], next_count: int = 20, check_cross_deps: bool = True):
+    """Print the dense dashboard with all 4 sections."""
+    print(f"\n{'='*100}")
+    print("  DENSE DASHBOARD - Single Pane of Glass")
+    print(f"{'='*100}\n")
+
+    # Section 2a: In-Progress Beads
+    print("2a. IN-PROGRESS BEADS")
+    print("─" * 100)
+
+    in_progress_list = get_dashboard_in_progress(projects)
+    if not in_progress_list:
+        print("  ● Idle\n")
+    else:
+        for entry in in_progress_list:
+            bead = entry['bead']
+            bead_id = bead['id']
+            title = bead.get('title', '(no title)')[:50]
+            started_at = get_relative_time(bead.get('claimed_at') or bead.get('created_at'))
+            pid_status = entry['pid_status'] or "unknown"
+
+            print(f"  → {bead_id:<16} {title:<50} | {pid_status:<40} [{started_at}]")
+        print()
+
+    # Section 2b: Top-N Next Beads
+    print("2b. TOP-N NEXT BEADS (Default N=20)")
+    print("─" * 100)
+
+    available_beads, blocked_beads = get_dashboard_next_beads(projects, next_count, check_cross_deps)
+
+    queue_num = 1
+    for candidate in available_beads:
+        bead = candidate['bead']
+        bead_id = bead['id']
+        priority = bead.get('priority', 4)
+        priority_label = f"P{priority}" if isinstance(priority, int) else str(priority)
+        title = bead.get('title', '(no title)')[:50]
+        proj = candidate['project_path'] if candidate['project_path'] != '.' else 'root'
+
+        print(f"  #{queue_num:<2} {bead_id:<16} {priority_label:<2} {title:<50} [{proj}]")
+        queue_num += 1
+
+    # Show blocked candidates if cross-deps enabled
+    if check_cross_deps and blocked_beads:
+        print("\n  (Blocked by cross-deps):")
+        for candidate in blocked_beads[:5]:  # Show up to 5 blocked
+            bead = candidate['bead']
+            bead_id = bead['id']
+            priority = bead.get('priority', 4)
+            priority_label = f"P{priority}" if isinstance(priority, int) else str(priority)
+            title = bead.get('title', '(no title)')[:40]
+            reason = candidate.get('blocked_reason', 'unknown')
+
+            print(f"  #-  {bead_id:<16} {priority_label:<2} {title:<40} ✗ {reason}")
+
+        if len(blocked_beads) > 5:
+            print(f"  ... and {len(blocked_beads) - 5} more blocked by cross-deps")
+
+    print()
+
+    # Section 2c: Requires Approval
+    print("2c. REQUIRES APPROVAL")
+    print("─" * 100)
+
+    approval_beads = get_approval_beads(projects)
+    if not approval_beads:
+        print("  (none)\n")
+    else:
+        for entry in approval_beads:
+            bead = entry['bead']
+            bead_id = bead['id']
+            title = bead.get('title', '(no title)')
+
+            print(f"  ○ {bead_id:<16} {title}")
+            print(f"    Action: bd update {bead_id} --close")
+        print()
+
+    # Section 2d: Requires Human Intervention
+    print("2d. REQUIRES HUMAN INTERVENTION")
+    print("─" * 100)
+
+    intervention_beads = get_intervention_beads(projects)
+    if not intervention_beads:
+        print("  (none)\n")
+    else:
+        for entry in intervention_beads:
+            bead = entry['bead']
+            bead_id = bead['id']
+            title = bead.get('title', '(no title)')
+            bead_type = entry['type']
+
+            icon = "❌" if bead_type == 'failure' else "⚠"
+            print(f"  {icon} {bead_id:<16} {title}")
+
+            # Extract intervention details from notes
+            notes = bead.get('notes', '')
+            if notes:
+                for line in notes.split('\n'):
+                    if any(keyword in line.lower() for keyword in ['resume', 'session', 'hatchery run']):
+                        print(f"    Intervention: {line.strip()}")
+
+    print()
 
 
 def discover_submodules(root_path: str = ".") -> List[Dict[str, str]]:
@@ -640,7 +1070,7 @@ def print_dashboard(projects: List[Dict[str, Any]]):
         print("  No beads found across any projects.\n")
 
 
-def print_multi_project_summary(projects: List[Dict[str, Any]], verbose=False, status_filter=None, label_filter=None, limit=5):
+def print_multi_project_summary(projects: List[Dict[str, Any]], verbose=False, status_filter=None, label_filter=None, limit=5, show_cross_deps=True):
     """Print unified multi-project summary with per-project sections and aggregate stats."""
     totals = {'total': 0, 'closed': 0, 'in_progress': 0, 'ready': 0, 'blocked': 0}
 
@@ -673,6 +1103,7 @@ def print_multi_project_summary(projects: List[Dict[str, Any]], verbose=False, s
                 label_filter=label_filter,
                 limit=limit,
                 project_header=None,  # Header already printed above
+                show_cross_deps=show_cross_deps,
             )
         else:
             # Single project, use original header
@@ -683,6 +1114,7 @@ def print_multi_project_summary(projects: List[Dict[str, Any]], verbose=False, s
                 label_filter=label_filter,
                 limit=limit,
                 project_header=header,
+                show_cross_deps=show_cross_deps,
             )
 
         totals['total'] += len(summary.all_beads)
@@ -804,6 +1236,14 @@ def main():
                         help='Comma-separated list of submodule names to include')
     parser.add_argument('--next-bead', action='store_true',
                         help='Show the single highest-priority ready bead across all projects (see bead-ordering.md)')
+    parser.add_argument('--next', type=int, default=20, metavar='N',
+                        help='How many next beads to show in dense dashboard (default: 20)')
+    parser.add_argument('--no-dashboard', action='store_true',
+                        help='Skip the dense dashboard (show per-DB sections only)')
+    parser.add_argument('--dashboard-only', action='store_true',
+                        help='Show only the dense dashboard (skip per-DB sections)')
+    parser.add_argument('--no-cross-deps', action='store_true',
+                        help='Skip cross-dep parsing and enforcement')
 
     args = parser.parse_args()
 
@@ -822,11 +1262,13 @@ def main():
         if args.json:
             summary.output_json()
         else:
+            show_cross_deps = not args.no_cross_deps
             summary.print_summary(
                 verbose=args.verbose,
                 status_filter=args.status,
                 label_filter=args.label,
                 limit=args.limit,
+                show_cross_deps=show_cross_deps,
             )
         return
 
@@ -836,7 +1278,19 @@ def main():
     # Apply --submodules filter if specified
     if args.submodules:
         names = {n.strip() for n in args.submodules.split(',')}
-        projects = [p for p in projects if p['path'] == '.' or p['name'] in names]
+
+        def _sub_matches(project_name: str, query: str) -> bool:
+            """Match by full name (modules/hatchery) or last component (hatchery)."""
+            return project_name == query or project_name.split('/')[-1] == query
+
+        projects = [p for p in projects if p['path'] == '.' or any(_sub_matches(p['name'], n) for n in names)]
+
+        # Error on any requested name that didn't match a project with a beads database
+        matched_names = {p['name'] for p in projects if p['path'] != '.'}
+        for n in names:
+            if not any(_sub_matches(m, n) for m in matched_names):
+                print(f"Error: no submodule with beads database found matching '{n}'", file=sys.stderr)
+                sys.exit(1)
 
     if args.json:
         output = {'projects': []}
@@ -858,14 +1312,25 @@ def main():
                 'in_progress': s.in_progress if s else [],
             })
         print(json.dumps(output, indent=2))
+    elif args.dashboard_only:
+        # Show only dense dashboard
+        show_cross_deps = not args.no_cross_deps
+        print_dense_dashboard(projects, next_count=args.next, check_cross_deps=show_cross_deps)
     else:
+        # Show per-DB sections and optionally dashboard
+        show_cross_deps = not args.no_cross_deps
         print_multi_project_summary(
             projects,
             verbose=args.verbose,
             status_filter=args.status,
             label_filter=args.label,
             limit=args.limit,
+            show_cross_deps=show_cross_deps,
         )
+
+        # Show dashboard unless --no-dashboard is specified
+        if not args.no_dashboard:
+            print_dense_dashboard(projects, next_count=args.next, check_cross_deps=show_cross_deps)
 
 
 if __name__ == '__main__':

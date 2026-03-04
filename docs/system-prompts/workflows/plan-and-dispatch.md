@@ -153,6 +153,66 @@ Re-block on the most relevant pending issue and stop. Do not proceed with the wo
 
 ---
 
+### Soft-Block vs. Hard-Block: When to Use Each
+
+A **hard dependency** (`bd dep add`) prevents a bead from becoming ready until the blocking bead is closed. A **soft-block** is advisory: the dependent bead is technically ready, but the description notes a recommended wait.
+
+| | Hard dependency | Soft-block |
+|---|---|---|
+| Enforcement | Automatic — bead won't become ready | Advisory — agent must check manually |
+| Use when | Upstream outcome might reject or redirect the work | Work is exploratory/read-only and safe to discard |
+| Risk if skipped | Work proceeds on a rejected plan | Wasted effort, but no correctness issue |
+
+**Rule:** If the upstream outcome could cause you to throw away your work, use a hard dependency. If you are doing read-only exploration that is safe to discard if upstream rejects, a soft-block note in the description is sufficient.
+
+**Example (safe soft-block):** A research bead that audits existing code is safe to start before an approval bead closes — the findings are read-only and useful regardless of whether the plan is approved.
+
+**Example (must be a hard dep):** An implementation bead that writes new code, modifies APIs, or creates external state must be hard-blocked on the approval bead. If the plan is rejected, the implementation work is wasted or harmful.
+
+---
+
+## Contract-First Cross-Module Design
+
+When two or more modules need to agree on an interface before either can implement their side, use the **Contract-First** pattern. This prevents interface drift and avoids costly rework.
+
+### The Pattern
+
+1. **Create a design-contract bead in hentown** (the cross-project coordinator)
+   - Write the interface contract as a `dev_notes/changes/` entry
+   - The change doc specifies: which classes move where, the API surface, auth protocol, env vars, testing strategy
+   - Example: `2026-03-04_slack-migration-contract.md` defined the hatchery↔pigeon socket interface before either module implemented their side
+
+2. **Module implementation beads soft-block on the contract bead**
+   - Note in each bead description: `"Soft-blocked: wait for <contract-bead-id> to close before starting"`
+   - Module agents read the contract doc before writing any code
+
+3. **Contract bead closes only after both modules confirm the interface is stable**
+   - Not at first draft — after both implementers have read it and agreed it's sufficient
+   - If a module agent finds the contract incomplete, it updates the contract doc (adds a notes section) before proceeding with implementation
+
+4. **Both module implementations reference the contract bead in their change docs**
+   - Creates a three-way audit trail: contract → module-A impl → module-B impl
+
+### Why This Works
+
+- **Prevents interface drift:** Both sides implement from the same spec rather than independently guessing
+- **Clear responsibility:** The contract bead owner (hentown) resolves ambiguities; module agents don't coordinate directly
+- **Parallel implementation:** Once the contract is final, both module implementations can proceed in parallel without coordination overhead
+- **Natural dual-identity:** Contract-first naturally produces clear ownership (e.g., pigeon-bot for command responses, hatchery-bot for execution events)
+
+### When to Use
+
+- Any time two modules need to share a new interface (socket protocol, message format, API contract)
+- When a feature requires behavior split across modules (e.g., "handle input in pigeon, execute in hatchery")
+- When a new shared data type or config schema is introduced that both modules will use
+
+### When NOT to Use
+
+- Single-module work that only reads from another module (no new interface introduced)
+- Trivial interface additions (e.g., adding a field to an existing, well-defined and stable type)
+
+---
+
 ## Bead Patterns
 
 All beads use labels (`--label <type>`) to encode their purpose.
@@ -802,7 +862,8 @@ bd update bd-stale-id --close
 
 ---
 
-**Last Updated:** 2026-02-18
+**Last Updated:** 2026-03-04
 **Recent Updates:**
+- 2026-03-04 - Added Soft-Block vs. Hard-Block guidance; added Contract-First Cross-Module Design section (hentown-569)
 - 2026-02-18 - Updated Monitoring section to document multi-project support (`--no-submodules`, `--submodules` flags)
 - 2026-02-15 - Added Planning Pre-Flight Checklist, External Resources template, and Phase Review Checkpoint references
