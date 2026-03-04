@@ -29,6 +29,7 @@ classifiers = [
 
 dependencies = [
     "mellona>=0.1.0",
+    "hatchery>=0.1.0",
     "google-api-python-client>=2.90",
     "google-auth-oauthlib>=1.2",
     "google-auth>=2.26",
