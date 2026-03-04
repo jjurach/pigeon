@@ -11,6 +11,7 @@ from slack_sdk.socket_mode.builtin.client import SocketModeClient
 from slack_sdk.web import WebClient
 
 from .config import SlackConfig
+from .slack_beads_handler import BeadsCommandProxy
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,18 @@ class SlackListenerDaemon:
         )
 
         self._message_handlers: List[Callable[[dict, str], None]] = []
+
+        # Initialize beads command proxy if hatchery is configured
+        if config.hatchery_socket_path:
+            self._beads_proxy: Optional[BeadsCommandProxy] = BeadsCommandProxy(
+                socket_address=config.hatchery_socket_path,
+                auth_token=config.hatchery_auth_token,
+                web_client=self._web_client,
+            )
+            # Register beads command handler
+            self.add_message_handler(self._beads_proxy.handle_message)
+        else:
+            self._beads_proxy = None
 
         # Reconnection tracking
         self._reconnect_attempt = 0

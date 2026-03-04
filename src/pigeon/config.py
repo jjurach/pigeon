@@ -14,6 +14,8 @@ class SlackConfig:
     app_token: str
     inbox_channel: str
     authorized_user_ids: List[str]
+    hatchery_socket_path: Optional[str] = None
+    hatchery_auth_token: Optional[str] = None
 
     @classmethod
     def from_env(cls) -> Optional["SlackConfig"]:
@@ -41,12 +43,24 @@ class SlackConfig:
         if not bot_token and not app_token:
             return None
 
+        # Load hatchery socket configuration (optional for beads commands)
+        hatchery_socket_path = os.getenv(
+            "PIGEON_HATCHERY_SOCKET_PATH",
+            "unix://~/.cache/hatchery/hatchery.sock"
+        )
+        hatchery_auth_token = os.getenv(
+            "PIGEON_HATCHERY_AUTH_TOKEN",
+            os.getenv("HATCHERY_SOCKET_AUTH_TOKEN")  # Fallback to HATCHERY_SOCKET_AUTH_TOKEN
+        )
+
         # Create and validate config
         config = cls(
             bot_token=bot_token or "",
             app_token=app_token or "",
             inbox_channel=inbox_channel or "",
             authorized_user_ids=[uid.strip() for uid in authorized_user_ids if uid.strip()],
+            hatchery_socket_path=hatchery_socket_path,
+            hatchery_auth_token=hatchery_auth_token,
         )
         config.validate()
         return config
