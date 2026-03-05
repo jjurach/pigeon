@@ -28,7 +28,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "mellona>=0.1.0",
+    "mellona @ file:///../mellona",
     "hatchery>=0.1.0",
     "google-api-python-client>=2.90",
     "google-auth-oauthlib>=1.2",
