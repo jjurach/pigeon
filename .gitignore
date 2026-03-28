@@ -135,7 +135,6 @@ ipython_config.py
 .python-version
 
 # pipenv
-Pipfile.lock
 
 # PEP 582
 __pypackages__/
@@ -214,4 +213,3 @@ session_*.md
 *.db
 
 # Beads workflow files
-.beads/
